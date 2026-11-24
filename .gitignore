@@ -21,3 +21,4 @@ backup/
 
 # AI agent helper docs (not needed on the server)
 .agents/
+.claude/
