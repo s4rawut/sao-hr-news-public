@@ -1,0 +1,111 @@
+---
+import { resolveVideo } from "../utils/video";
+import { mediaUrl } from "../utils/site-info";
+import Icon from "./Icon.astro";
+
+interface Props {
+	title: string;
+	data: {
+		video_file?: { src?: string; url?: string; meta?: Record<string, unknown> };
+		video_url?: string;
+		poster?: { src?: string; meta?: Record<string, unknown> };
+	};
+}
+
+const { title, data } = Astro.props;
+const video = resolveVideo(data);
+const poster = mediaUrl(data.poster);
+---
+
+<div class="player">
+	{
+		video?.kind === "file" ? (
+			<video controls preload="metadata" playsinline poster={poster}>
+				<source src={video.src} />
+				เบราว์เซอร์ของคุณไม่รองรับการเล่นวิดีโอ
+			</video>
+		) : video?.kind === "embed" ? (
+			<iframe
+				src={video.src}
+				title={title}
+				loading="lazy"
+				allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+				allowfullscreen
+				referrerpolicy="strict-origin-when-cross-origin"
+			/>
+		) : (
+			<a
+				class="placeholder"
+				href={video?.src}
+				target={video ? "_blank" : undefined}
+				rel={video ? "noopener noreferrer" : undefined}
+				style={poster ? `background-image: url("${poster}")` : undefined}
+			>
+				<span class="play"><Icon name="play" size={30} /></span>
+				{!video && <span class="soon">วิดีโอกำลังจะมาเร็วๆ นี้</span>}
+			</a>
+		)
+	}
+</div>
+
+<style>
+	.player {
+		position: relative;
+		aspect-ratio: 16 / 9;
+		overflow: hidden;
+		border-radius: var(--radius);
+		background: #0f2e3d;
+	}
+
+	.player video,
+	.player iframe {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		border: 0;
+		background: #000;
+	}
+
+	.placeholder {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		background: linear-gradient(135deg, #0f6f87, #0f2e3d) center / cover no-repeat;
+		color: #fff;
+	}
+
+	.placeholder::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background: rgb(10 40 55 / 35%);
+	}
+
+	.play {
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: 72px;
+		height: 72px;
+		border-radius: 50%;
+		background: rgb(255 255 255 / 92%);
+		color: var(--color-primary);
+		box-shadow: 0 8px 30px rgb(0 0 0 / 25%);
+		transition: transform 0.2s;
+	}
+
+	a.placeholder[href]:hover .play {
+		transform: scale(1.08);
+	}
+
+	.soon {
+		position: relative;
+		font-weight: 600;
+		text-shadow: 0 1px 8px rgb(0 0 0 / 40%);
+	}
+</style>

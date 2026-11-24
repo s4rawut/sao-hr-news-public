@@ -1,0 +1,55 @@
+---
+import { byPostDate } from "../../utils/post-date";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import {
+	getTaxonomyTermsWithCacheHint,
+	getEmDashCollection,
+	decodeSlug,
+} from "emdash";
+import LibraryChips from "../../components/LibraryChips.astro";
+import PostList from "../../components/PostList.astro";
+import Base from "../../layouts/Base.astro";
+import { getSiteInfo } from "../../utils/site-info";
+
+const slug = decodeSlug(Astro.params.slug);
+const termsResult = await getTaxonomyTermsWithCacheHint("category", {
+	includeCounts: true,
+});
+// Sub-categories (e.g. ข่าวประชาสัมพันธ์ › นโยบาย) have their own pages too.
+type Term = (typeof termsResult.data)[number];
+const flatten = (list: Term[], parent?: Term): (Term & { parent?: Term })[] =>
+	list.flatMap((t) => [{ ...t, parent }, ...flatten(t.children ?? [], t)]);
+const allTerms = flatten(termsResult.data);
+const term = slug ? allTerms.find((item) => item.slug === slug) : null;
+
+if (!term) {
+	// The old ข่าวประชาสัมพันธ์ / เอกสารเผยแพร่ groups were merged into คลังข้อมูล.
+	if (slug === "news" || slug === "documents") return Astro.redirect("/posts", 301);
+	return Astro.rewrite("/404");
+}
+
+// sorted by the "วันที่" typed in admin (newest first), so all posts are loaded and paged here
+const { entries: allPosts, cacheHint } = await getEmDashCollection("posts", {
+	where: { category: term.slug },
+	orderBy: { published_at: "desc" },
+	limit: 1000,
+});
+// paging and the ข้าราชการ / ลูกจ้าง switch are done in the browser by PostList
+const posts = byPostDate(allPosts);
+if (Astro.cache?.enabled) {
+	Astro.cache.set(termsResult.cacheHint);
+	Astro.cache.set(cacheHint);
+}
+const info = await getSiteInfo();
+---
+
+<Base title={term.label} description={term.label}>
+	<Breadcrumbs items={[{ label: info.heading_documents, href: "/posts" }, { label: term.label }]} />
+	<PostList
+		heading={`${info.heading_documents}: ${term.label}`}
+		posts={posts}
+		basePath={`/category/${term.slug}`}
+	>
+		<LibraryChips current={term.slug} />
+	</PostList>
+</Base>

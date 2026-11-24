@@ -1,0 +1,103 @@
+{
+	"$schema": "https://emdashcms.com/seed.schema.json",
+	"version": "1",
+	"meta": {
+		"name": "HR SAO infographics",
+		"description": "Infographic files shown as an accordion",
+		"author": "HR SAO"
+	},
+	"collections": [
+		{
+			"slug": "infographics",
+			"label": "ไฟล์เอกสารในหน้าเว็บ (PDF / รูปภาพ)",
+			"labelSingular": "ไฟล์เอกสาร",
+			"supports": [
+				"drafts",
+				"revisions",
+				"scheduling"
+			],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "หัวข้อ",
+					"type": "string",
+					"required": true,
+					"searchable": true
+				},
+				{
+					"slug": "file",
+					"label": "ไฟล์ (PDF, PNG, JPG)",
+					"type": "file",
+					"required": true,
+					"validation": {
+						"allowedMimeTypes": [
+							"application/pdf",
+							"image/png",
+							"image/jpeg",
+							"image/webp",
+							"image/gif"
+						]
+					}
+				},
+				{
+					"slug": "description",
+					"label": "คำอธิบาย (ไม่บังคับ)",
+					"type": "text",
+					"searchable": true
+				},
+				{
+					"slug": "group",
+					"label": "หัวข้อกลุ่ม (ไม่บังคับ เช่น Sao Hrm Knowledge Sharing)",
+					"type": "string"
+				},
+				{
+					"slug": "sort_order",
+					"label": "ลำดับการแสดง (น้อยขึ้นก่อน, เว้นว่าง = เรียงตามวันที่ล่าสุด)",
+					"type": "integer"
+				},
+				{
+					"slug": "tab",
+					"label": "แท็บปี (เช่น 2567 หรือ 2561 — ใช้ในหน้าคำบรรยายลักษณะงาน)",
+					"type": "string"
+				}
+			]
+		}
+	],
+	"taxonomies": [
+		{
+			"name": "file_page",
+			"label": "หน้าที่แสดงไฟล์",
+			"labelSingular": "หน้าที่แสดงไฟล์",
+			"hierarchical": false,
+			"collections": [
+				"infographics"
+			],
+			"terms": [
+				{
+					"slug": "อินโฟกราฟิก",
+					"label": "อินโฟกราฟิก"
+				},
+				{
+					"slug": "position-standards",
+					"label": "มาตรฐานกำหนดตำแหน่ง"
+				},
+				{
+					"slug": "job-descriptions",
+					"label": "คำบรรยายลักษณะงาน"
+				},
+				{
+					"slug": "structure",
+					"label": "โครงสร้าง"
+				},
+				{
+					"slug": "auditees",
+					"label": "หน่วยรับตรวจ"
+				},
+				{
+					"slug": "contact",
+					"label": "เกี่ยวกับเรา"
+				}
+			]
+		}
+	]
+}

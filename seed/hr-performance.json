@@ -1,0 +1,57 @@
+{
+	"$schema": "https://emdashcms.com/seed.schema.json",
+	"version": "1",
+	"meta": {
+		"name": "HR SAO monthly performance",
+		"description": "Monthly performance videos",
+		"author": "HR SAO"
+	},
+	"collections": [
+		{
+			"slug": "performance",
+			"label": "ผลการดำเนินการประจำเดือน",
+			"labelSingular": "ผลการดำเนินการ",
+			"supports": [
+				"drafts",
+				"revisions",
+				"scheduling"
+			],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "หัวข้อ",
+					"type": "string",
+					"required": true,
+					"searchable": true
+				},
+				{
+					"slug": "report_month",
+					"label": "เดือนที่รายงาน (เลือกวันใดก็ได้ในเดือนนั้น)",
+					"type": "datetime",
+					"required": true
+				},
+				{
+					"slug": "video_file",
+					"label": "ไฟล์วิดีโอ (MP4) — อัปโหลดเอง",
+					"type": "file"
+				},
+				{
+					"slug": "video_url",
+					"label": "หรือ ลิงก์วิดีโอ (YouTube / Facebook / ไฟล์ .mp4)",
+					"type": "url"
+				},
+				{
+					"slug": "poster",
+					"label": "ภาพปกวิดีโอ (ไม่บังคับ)",
+					"type": "image"
+				},
+				{
+					"slug": "description",
+					"label": "คำอธิบาย",
+					"type": "text",
+					"searchable": true
+				}
+			]
+		}
+	]
+}

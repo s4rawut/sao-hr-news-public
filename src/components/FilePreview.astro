@@ -1,0 +1,468 @@
+---
+import Icon from "./Icon.astro";
+
+/**
+ * One shared preview window for the page. Any link carrying data-preview-kind opens here
+ * instead of navigating: PDFs and pages in a frame, images as a picture, with Download
+ * (files) and "open in new tab" buttons. Without JavaScript the links still work normally.
+ * Any plain link to a PDF on the site (e.g. "ไฟล์ประกาศ (PDF)") opens here too.
+ */
+---
+
+<dialog class="fp" data-file-preview aria-labelledby="fp-title">
+	<div class="fp-box">
+		<header class="fp-head">
+			<div class="fp-heading">
+				<h2 id="fp-title" class="fp-title" data-fp-title></h2>
+				<p class="fp-sub" data-fp-sub></p>
+			</div>
+			<a class="fp-download" data-fp-download>
+				<Icon name="download" size={18} /> ดาวน์โหลด
+			</a>
+			<a class="fp-open" data-fp-open target="_blank" rel="noopener noreferrer">เปิดในแท็บใหม่</a>
+			<button type="button" class="fp-close" data-fp-close aria-label="ปิด">
+				<Icon name="close" size={22} />
+			</button>
+		</header>
+		<div class="fp-body" data-fp-body></div>
+		<p class="fp-hint" data-fp-hint hidden>ถ้าหน้าไม่แสดง กด “เปิดในแท็บใหม่”</p>
+	</div>
+</dialog>
+
+<script>
+	const dialog = document.querySelector<HTMLDialogElement>("[data-file-preview]");
+	if (dialog) {
+		const title = dialog.querySelector<HTMLElement>("[data-fp-title]")!;
+		const body = dialog.querySelector<HTMLElement>("[data-fp-body]")!;
+		const hint = dialog.querySelector<HTMLElement>("[data-fp-hint]")!;
+		const openBtn = dialog.querySelector<HTMLAnchorElement>("[data-fp-open]")!;
+		const dlBtn = dialog.querySelector<HTMLAnchorElement>("[data-fp-download]")!;
+		const sub = dialog.querySelector<HTMLElement>("[data-fp-sub]")!;
+		const KIND_LABEL: Record<string, string> = { pdf: "เอกสาร PDF", image: "รูปภาพ", link: "หน้าเว็บ", file: "ไฟล์" };
+		// Page count straight from the PDF bytes (no viewer library needed); left out when it can't be read.
+		const pageCount = async (url: string) => {
+			try {
+				const res = await fetch(url);
+				const text = new TextDecoder("latin1").decode(await res.arrayBuffer());
+				const counts = [...text.matchAll(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)/g)].map((m) => Number(m[1]));
+				const alt = [...text.matchAll(/\/Count\s+(\d+)[^>]*?\/Type\s*\/Pages\b/g)].map((m) => Number(m[1]));
+				const pages = (text.match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
+				const n = Math.max(0, ...counts, ...alt) || pages;
+				return n > 0 ? n : undefined;
+			} catch {
+				return undefined;
+			}
+		};
+
+		// PDFs are drawn page by page with pdf.js (bundled in /vendor/pdfjs), each page a white sheet
+		// on a light grey desk. Pages render as they scroll into view. If pdf.js can't open the file,
+		// the browser's own viewer is used instead.
+		// Minimal typing for the parts of pdf.js used here (the library is a static file, not a package).
+		type PdfPage = {
+			getViewport: (o: { scale: number }) => { width: number; height: number };
+			render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
+		};
+		type PdfDoc = { numPages: number; getPage: (n: number) => Promise<PdfPage>; destroy: () => unknown };
+		type PdfJs = {
+			GlobalWorkerOptions: { workerSrc: string };
+			getDocument: (o: { url: string; isEvalSupported: boolean }) => { promise: Promise<PdfDoc> };
+		};
+		let pdfjs: Promise<PdfJs> | undefined;
+		const loadPdfJs = () =>
+			(pdfjs ??= (import(/* @vite-ignore */ new URL("/vendor/pdfjs/pdf.min.mjs", location.origin).href) as Promise<PdfJs>).then((m) => {
+				m.GlobalWorkerOptions.workerSrc = new URL("/vendor/pdfjs/pdf.worker.min.mjs", location.origin).href;
+				return m;
+			}));
+		let currentDoc: { destroy: () => unknown } | undefined;
+		const renderPdf = async (url: string, name: string) => {
+			const token = (dialog.dataset.token = String(Math.random()));
+			const pages = document.createElement("div");
+			pages.className = "fp-pages";
+			const loading = document.createElement("p");
+			loading.className = "fp-loading";
+			loading.textContent = "กำลังเปิดเอกสาร…";
+			pages.append(loading);
+			body.append(pages);
+			try {
+				const lib = await loadPdfJs();
+				const doc = await lib.getDocument({ url, isEvalSupported: false }).promise;
+				if (dialog.dataset.token !== token) return void doc.destroy();
+				currentDoc = doc;
+				sub.textContent = `เอกสาร PDF · ${doc.numPages} หน้า`;
+				loading.remove();
+				const first = await doc.getPage(1);
+				const base = first.getViewport({ scale: 1 });
+				const io = new IntersectionObserver(
+					(entries) => {
+						for (const en of entries) {
+							if (!en.isIntersecting) continue;
+							io.unobserve(en.target);
+							const sheet = en.target as HTMLElement;
+							const n = Number(sheet.dataset.page);
+							doc.getPage(n).then((page) => {
+								const width = sheet.clientWidth;
+								const vp1 = page.getViewport({ scale: 1 });
+								const ratio = Math.min(window.devicePixelRatio || 1, 2);
+								const vp = page.getViewport({ scale: (width / vp1.width) * ratio });
+								const canvas = document.createElement("canvas");
+								canvas.width = Math.floor(vp.width);
+								canvas.height = Math.floor(vp.height);
+								canvas.setAttribute("aria-label", `${name} หน้า ${n}`);
+								sheet.append(canvas);
+								return page.render({ canvasContext: canvas.getContext("2d")!, viewport: vp }).promise;
+							});
+						}
+					},
+					{ root: body, rootMargin: "800px 0px" },
+				);
+				for (let n = 1; n <= doc.numPages; n++) {
+					const sheet = document.createElement("div");
+					sheet.className = "fp-sheet";
+					sheet.dataset.page = String(n);
+					sheet.style.aspectRatio = `${base.width} / ${base.height}`;
+					pages.append(sheet);
+					io.observe(sheet);
+				}
+			} catch {
+				if (dialog.dataset.token !== token) return;
+				pages.remove();
+				const frame = document.createElement("iframe");
+				frame.src = `${url}#toolbar=0&navpanes=0&view=FitH`;
+				frame.title = name;
+				body.append(frame);
+				const n = await pageCount(url);
+				if (n && dialog.dataset.token === token) sub.textContent = `เอกสาร PDF · ${n} หน้า`;
+			}
+		};
+
+		const show = (a: HTMLAnchorElement) => {
+			const { previewKind: kind, previewView: view, previewDownload: download, previewName: name, previewOpen: open, previewTitle } =
+				a.dataset;
+			title.textContent = previewTitle ?? "";
+			sub.textContent = KIND_LABEL[kind ?? ""] ?? "";
+			body.replaceChildren();
+			if (kind === "image") {
+				const img = document.createElement("img");
+				img.src = view!;
+				img.alt = previewTitle ?? "";
+				body.append(img);
+			} else if (kind === "file") {
+				const p = document.createElement("p");
+				p.className = "fp-none";
+				p.textContent = "ไฟล์ประเภทนี้ดูตัวอย่างในหน้าเว็บไม่ได้ กด “ดาวน์โหลด” เพื่อเปิดไฟล์";
+				body.append(p);
+			} else if (kind === "pdf") {
+				renderPdf(view!, previewTitle ?? "");
+			} else {
+				const frame = document.createElement("iframe");
+				frame.src = view!;
+				frame.title = previewTitle ?? "";
+				body.append(frame);
+			}
+			body.dataset.kind = kind;
+			hint.hidden = kind !== "link";
+			// New tab = the browser's full PDF viewer (thumbnails, zoom, print), named after the document.
+			const openUrl = new URL(open ?? view ?? "#", location.href);
+			if (kind === "pdf" && openUrl.pathname.startsWith("/files/pdf/") && !openUrl.searchParams.has("name") && previewTitle)
+				openUrl.searchParams.set("name", `${previewTitle}.pdf`);
+			openUrl.hash = "";
+			openBtn.href = openUrl.href;
+			openBtn.hidden = kind === "file";
+			if (download) {
+				dlBtn.href = download;
+				dlBtn.setAttribute("download", name ?? "");
+				dlBtn.hidden = false;
+			} else {
+				dlBtn.hidden = true;
+			}
+			dialog.showModal();
+		};
+
+		// Plain links to a PDF on this site: /files/pdf/<key> (inline viewer route) or an uploaded .pdf.
+		const pdfLink = (a: HTMLAnchorElement) => {
+			if (a.hasAttribute("download") || a.dataset.noPreview !== undefined) return false;
+			let u: URL;
+			try {
+				u = new URL(a.href, location.href);
+			} catch {
+				return false;
+			}
+			if (u.origin !== location.origin) return false;
+			return u.pathname.startsWith("/files/pdf/") || /\.pdf$/i.test(u.pathname);
+		};
+		const labelOf = (a: HTMLAnchorElement, u: URL) => {
+			const own = a.dataset.previewTitle || a.getAttribute("aria-label") || a.title;
+			if (own) return own;
+			// Generic button texts ("ไฟล์ประกาศ (PDF)") get the title of the card they sit in.
+			const text = (a.textContent ?? "").replace(/\s+/g, " ").trim();
+			const generic = !text || /^(ไฟล์|ดาวน์โหลด|เปิด|ดู)/.test(text) || text.length < 4;
+			const card = a.closest("li, article, section, tr, .card");
+			const heading = card?.querySelector("h1, h2, h3, h4, strong, .acc-name")?.textContent?.replace(/\s+/g, " ").trim();
+			if (generic && heading) return heading;
+			return text || decodeURIComponent(u.pathname.split("/").pop() ?? "");
+		};
+
+		document.addEventListener("click", (e) => {
+			if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+			// Anything marked for preview (a link, or a file row in a list) opens here.
+			const marked = (e.target as Element | null)?.closest<HTMLElement>("[data-preview-kind]");
+			if (marked && !(e.target as Element).closest("[data-fp-download], [data-fp-open]")) {
+				e.preventDefault();
+				show(marked as HTMLAnchorElement);
+				return;
+			}
+			const a = (e.target as Element | null)?.closest<HTMLAnchorElement>("a[href]");
+			// Links inside this window ("เปิดในแท็บใหม่", "ดาวน์โหลด") must work normally.
+			if (!a || dialog.contains(a)) return;
+			if (!pdfLink(a)) return;
+			e.preventDefault();
+			const u = new URL(a.href, location.href);
+			const key = u.pathname.startsWith("/files/pdf/") ? u.pathname.slice("/files/pdf/".length) : "";
+			const name = labelOf(a, u);
+			a.dataset.previewKind = "pdf";
+			a.dataset.previewView = u.href;
+			a.dataset.previewOpen = u.href;
+			a.dataset.previewDownload = key ? `/_emdash/api/media/file/${key}` : u.href;
+			a.dataset.previewName = `${name.replace(/[\\/:*?"<>|]+/g, " ").trim()}.pdf`;
+			a.dataset.previewTitle = name;
+			show(a);
+		});
+
+		const close = () => dialog.close();
+		dialog.querySelector("[data-fp-close]")!.addEventListener("click", close);
+		// Click on the dimmed backdrop closes the window.
+		dialog.addEventListener("click", (e) => {
+			if (e.target === dialog) close();
+		});
+		// Stop the frame (and any audio/video) once closed.
+		dialog.addEventListener("close", () => {
+			dialog.dataset.token = "";
+			currentDoc?.destroy();
+			currentDoc = undefined;
+			body.replaceChildren();
+		});
+	}
+</script>
+
+<style>
+	/* a large popup over the page (the page stays visible around it) */
+	.fp {
+		width: min(1640px, calc(100vw - 48px));
+		height: calc(100dvh - 32px);
+		margin: auto;
+		max-width: none;
+		max-height: none;
+		padding: 0;
+		border: 0;
+		border-radius: 22px;
+		overflow: hidden;
+		background: var(--color-surface);
+		color: var(--color-text);
+		box-shadow: 0 24px 60px rgb(10 30 40 / 35%);
+	}
+
+	.fp::backdrop {
+		background: rgb(10 30 40 / 55%);
+	}
+
+	.fp-box {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+	}
+
+	.fp-head {
+		display: flex;
+		align-items: center;
+		gap: 18px;
+		padding: 16px 22px;
+		border-bottom: 1px solid var(--color-border);
+		background: #fff;
+	}
+
+	.fp-heading {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.fp-title {
+		margin: 0;
+		font-size: 1.15rem;
+		font-weight: 700;
+		color: #13294b;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.fp-sub {
+		margin: 2px 0 0;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.fp-sub:empty {
+		display: none;
+	}
+
+	.fp-download {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		flex-shrink: 0;
+		padding: 10px 24px;
+		border-radius: 999px;
+		background: #13294b;
+		color: #fff;
+		font-weight: 700;
+		text-decoration: none;
+		transition: background 0.15s;
+	}
+
+	.fp-download:hover {
+		background: #0b1a33;
+		color: #fff;
+	}
+
+	.fp-open {
+		flex-shrink: 0;
+		font-weight: 700;
+		color: #13294b;
+		text-decoration: underline;
+		text-underline-offset: 4px;
+	}
+
+	.fp-download[hidden],
+	.fp-open[hidden] {
+		display: none;
+	}
+
+	.fp-close {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 44px;
+		height: 44px;
+		border: 0;
+		border-radius: 50%;
+		background: #f1efe9;
+		color: #13294b;
+		cursor: pointer;
+	}
+
+	.fp-close:hover {
+		background: #13294b;
+		color: #fff;
+	}
+
+	.fp-body {
+		flex: 1;
+		min-height: 0;
+		background: #f3f2ee;
+		overflow: auto;
+	}
+
+	.fp-body :global(iframe) {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border: 0;
+		background: #fff;
+	}
+
+	/* PDFs: each page a white sheet on a light grey desk */
+	.fp-body[data-kind="pdf"] {
+		padding: 24px clamp(12px, 6vw, 72px);
+	}
+
+	.fp-body :global(.fp-pages) {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 20px;
+		max-width: 1000px;
+		margin: 0 auto;
+	}
+
+	.fp-body :global(.fp-sheet) {
+		width: 100%;
+		border: 1px solid var(--color-border);
+		border-radius: 14px;
+		background: #fff;
+		box-shadow: var(--shadow);
+		overflow: hidden;
+	}
+
+	.fp-body :global(.fp-sheet canvas) {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	.fp-body :global(.fp-loading) {
+		padding: 60px 0;
+		color: var(--color-muted);
+	}
+
+	.fp-body[data-kind="pdf"] :global(iframe) {
+		height: calc(100% - 4px);
+		border: 1px solid var(--color-border);
+		border-radius: 14px;
+		box-shadow: var(--shadow);
+	}
+
+	.fp-body[data-kind="image"] {
+		display: flex;
+		justify-content: center;
+		align-items: flex-start;
+		padding: 16px;
+	}
+
+	.fp-body :global(img) {
+		max-width: 100%;
+		height: auto;
+		border-radius: var(--radius-sm);
+		box-shadow: var(--shadow);
+	}
+
+	.fp-body :global(.fp-none) {
+		margin: 0;
+		padding: 48px 24px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+
+	.fp-hint {
+		margin: 0;
+		padding: 8px 18px 0;
+		color: var(--color-muted);
+		font-size: 0.82rem;
+	}
+
+	@media (max-width: 600px) {
+		.fp-head {
+			flex-wrap: wrap;
+			gap: 10px;
+			padding: 12px 14px;
+		}
+
+		.fp-heading {
+			flex-basis: calc(100% - 56px);
+		}
+
+		.fp-close {
+			order: -1;
+			margin-left: auto;
+		}
+
+		.fp-body[data-kind="pdf"] {
+			padding: 8px;
+		}
+
+		.fp {
+			width: 100vw;
+			height: 100dvh;
+			border-radius: 0;
+		}
+	}
+</style>

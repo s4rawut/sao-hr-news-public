@@ -1,0 +1,668 @@
+{
+	"$schema": "https://emdashcms.com/seed.schema.json",
+	"version": "1",
+	"meta": {
+		"name": "HR SAO additions",
+		"description": "Collections and demo content for the HR SAO homepage",
+		"author": "HR SAO"
+	},
+	"collections": [
+		{
+			"slug": "recruitments",
+			"label": "ประกาศรับสมัครสอบ",
+			"labelSingular": "ประกาศรับสมัคร",
+			"supports": [
+				"drafts",
+				"revisions"
+			],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "ชื่อประกาศ",
+					"type": "string",
+					"required": true,
+					"searchable": true
+				},
+				{
+					"slug": "banner",
+					"label": "รูปแบนเนอร์",
+					"type": "image",
+					"required": true
+				},
+				{
+					"slug": "link",
+					"label": "ลิงก์ (ถ้ามี)",
+					"type": "url"
+				},
+				{
+					"slug": "sort_order",
+					"label": "ลำดับการแสดง",
+					"type": "integer"
+				}
+			]
+		},
+		{
+			"slug": "events",
+			"label": "ปฏิทินกิจกรรม",
+			"labelSingular": "กิจกรรม",
+			"supports": [
+				"drafts"
+			],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "ชื่อกิจกรรม",
+					"type": "string",
+					"required": true
+				},
+				{
+					"slug": "event_date",
+					"label": "วันที่",
+					"type": "datetime",
+					"required": true
+				},
+				{
+					"slug": "description",
+					"label": "รายละเอียด",
+					"type": "text"
+				},
+				{
+					"slug": "holiday",
+					"label": "เป็นวันหยุดราชการ",
+					"type": "boolean"
+				}
+			]
+		}
+	],
+	"taxonomies": [
+		{
+			"name": "category",
+			"label": "Categories",
+			"labelSingular": "Category",
+			"hierarchical": true,
+			"collections": [
+				"posts"
+			],
+			"terms": [
+				{
+					"slug": "news",
+					"label": "ข่าวประชาสัมพันธ์"
+				},
+				{
+					"slug": "announcement",
+					"label": "ประกาศ"
+				},
+				{
+					"slug": "order",
+					"label": "คำสั่ง"
+				},
+				{
+					"slug": "regulation",
+					"label": "ระเบียบ"
+				},
+				{
+					"slug": "criteria",
+					"label": "หลักเกณฑ์"
+				},
+				{
+					"slug": "memo",
+					"label": "บันทึกข้อความ"
+				}
+			]
+		}
+	],
+	"content": {
+		"posts": [
+			{
+				"id": "news-1",
+				"slug": "news-1",
+				"status": "published",
+				"data": {
+					"title": "แนวทางการประเมินผลงาน เพื่อเลื่อนข้าราชการ สตง. ขึ้นแต่งตั้งให้ดำรงตำแหน่งประเภทวิชาการ ระดับชำนาญการ",
+					"excerpt": "แนวทางการประเมินผลงาน เพื่อเลื่อนข้าราชการ สตง. ขึ้นแต่งตั้งให้ดำรงตำแหน่งประเภทวิชาการ ระดับชำนาญการ",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "แนวทางการประเมินผลงาน เพื่อเลื่อนข้าราชการ สตง. ขึ้นแต่งตั้งให้ดำรงตำแหน่งประเภทวิชาการ ระดับชำนาญการ"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"news"
+					]
+				}
+			},
+			{
+				"id": "news-2",
+				"slug": "news-2",
+				"status": "published",
+				"data": {
+					"title": "การปฏิบัติราชการนอกที่ตั้งสำนักงาน Work From Anywhere",
+					"excerpt": "การปฏิบัติราชการนอกที่ตั้งสำนักงาน Work From Anywhere",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "การปฏิบัติราชการนอกที่ตั้งสำนักงาน Work From Anywhere"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"news"
+					]
+				}
+			},
+			{
+				"id": "news-3",
+				"slug": "news-3",
+				"status": "published",
+				"data": {
+					"title": "แผนการบริหารและพัฒนาทรัพยากรบุคคล ประจำปีงบประมาณ พ.ศ. 2569",
+					"excerpt": "แผนการบริหารและพัฒนาทรัพยากรบุคคล ประจำปีงบประมาณ พ.ศ. 2569",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "แผนการบริหารและพัฒนาทรัพยากรบุคคล ประจำปีงบประมาณ พ.ศ. 2569"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"news"
+					]
+				}
+			},
+			{
+				"id": "news-4",
+				"slug": "news-4",
+				"status": "published",
+				"data": {
+					"title": "ระเบียบ สตง. ว่าด้วยการบริหารราชการของ สตง. พ.ศ. 2567",
+					"excerpt": "ระเบียบ สตง. ว่าด้วยการบริหารราชการของ สตง. พ.ศ. 2567",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "ระเบียบ สตง. ว่าด้วยการบริหารราชการของ สตง. พ.ศ. 2567"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"news"
+					]
+				}
+			},
+			{
+				"id": "news-5",
+				"slug": "news-5",
+				"status": "published",
+				"data": {
+					"title": "ประกาศ สตง. เรื่อง มาตรการและแนวปฏิบัติในการประหยัดพลังงาน (ไฟฟ้า)",
+					"excerpt": "ประกาศ สตง. เรื่อง มาตรการและแนวปฏิบัติในการประหยัดพลังงาน (ไฟฟ้า)",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "ประกาศ สตง. เรื่อง มาตรการและแนวปฏิบัติในการประหยัดพลังงาน (ไฟฟ้า)"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"news"
+					]
+				}
+			},
+			{
+				"id": "news-6",
+				"slug": "news-6",
+				"status": "published",
+				"data": {
+					"title": "แนวทางการปฏิบัติราชการที่ดี ตามแนวคำวินิจฉัยศาลปกครองเกี่ยวกับกระบวนการดำเนินการทางวินัย",
+					"excerpt": "แนวทางการปฏิบัติราชการที่ดี ตามแนวคำวินิจฉัยศาลปกครองเกี่ยวกับกระบวนการดำเนินการทางวินัย",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "แนวทางการปฏิบัติราชการที่ดี ตามแนวคำวินิจฉัยศาลปกครองเกี่ยวกับกระบวนการดำเนินการทางวินัย"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"news"
+					]
+				}
+			},
+			{
+				"id": "news-7",
+				"slug": "news-7",
+				"status": "published",
+				"data": {
+					"title": "การลงเวลาปฏิบัติราชการและการปฏิบัติงาน ภายใน ณ ที่พักอาศัยของข้าราชการและลูกจ้าง สตง. (Work From Home)",
+					"excerpt": "การลงเวลาปฏิบัติราชการและการปฏิบัติงาน ภายใน ณ ที่พักอาศัยของข้าราชการและลูกจ้าง สตง. (Work From Home)",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "การลงเวลาปฏิบัติราชการและการปฏิบัติงาน ภายใน ณ ที่พักอาศัยของข้าราชการและลูกจ้าง สตง. (Work From Home)"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"news"
+					]
+				}
+			},
+			{
+				"id": "doc-1",
+				"slug": "doc-1",
+				"status": "published",
+				"data": {
+					"title": "คำสั่ง สตง. ที่ 529/2569 เรื่อง บรรจุและแต่งตั้งผู้สอบแข่งขันได้",
+					"excerpt": "คำสั่ง สตง. ที่ 529/2569 เรื่อง บรรจุและแต่งตั้งผู้สอบแข่งขันได้",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "คำสั่ง สตง. ที่ 529/2569 เรื่อง บรรจุและแต่งตั้งผู้สอบแข่งขันได้"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"order"
+					]
+				}
+			},
+			{
+				"id": "doc-2",
+				"slug": "doc-2",
+				"status": "published",
+				"data": {
+					"title": "คำสั่ง สตง. ที่ 522/2569 เรื่อง อนุญาตให้ลูกจ้างสมทบลาออกจากราชการ",
+					"excerpt": "คำสั่ง สตง. ที่ 522/2569 เรื่อง อนุญาตให้ลูกจ้างสมทบลาออกจากราชการ",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "คำสั่ง สตง. ที่ 522/2569 เรื่อง อนุญาตให้ลูกจ้างสมทบลาออกจากราชการ"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"order"
+					]
+				}
+			},
+			{
+				"id": "doc-3",
+				"slug": "doc-3",
+				"status": "published",
+				"data": {
+					"title": "คำสั่ง สตง. ที่ 523/2569 เรื่อง บรรจุและแต่งตั้งผู้สอบแข่งขันได้",
+					"excerpt": "คำสั่ง สตง. ที่ 523/2569 เรื่อง บรรจุและแต่งตั้งผู้สอบแข่งขันได้",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "คำสั่ง สตง. ที่ 523/2569 เรื่อง บรรจุและแต่งตั้งผู้สอบแข่งขันได้"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"order"
+					]
+				}
+			},
+			{
+				"id": "doc-4",
+				"slug": "doc-4",
+				"status": "published",
+				"data": {
+					"title": "คำสั่ง สตง. ที่ 515/2569 เรื่อง ย้ายข้าราชการ",
+					"excerpt": "คำสั่ง สตง. ที่ 515/2569 เรื่อง ย้ายข้าราชการ",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "คำสั่ง สตง. ที่ 515/2569 เรื่อง ย้ายข้าราชการ"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"order"
+					]
+				}
+			},
+			{
+				"id": "doc-5",
+				"slug": "doc-5",
+				"status": "published",
+				"data": {
+					"title": "คำสั่ง สตง. ที่ 516/2569 เรื่อง ย้ายข้าราชการ",
+					"excerpt": "คำสั่ง สตง. ที่ 516/2569 เรื่อง ย้ายข้าราชการ",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "คำสั่ง สตง. ที่ 516/2569 เรื่อง ย้ายข้าราชการ"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"order"
+					]
+				}
+			},
+			{
+				"id": "doc-6",
+				"slug": "doc-6",
+				"status": "published",
+				"data": {
+					"title": "คำสั่ง สตง. ที่ 519/2569 เรื่อง อนุญาตให้ลูกจ้างสมทบลาออกจากราชการ",
+					"excerpt": "คำสั่ง สตง. ที่ 519/2569 เรื่อง อนุญาตให้ลูกจ้างสมทบลาออกจากราชการ",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "คำสั่ง สตง. ที่ 519/2569 เรื่อง อนุญาตให้ลูกจ้างสมทบลาออกจากราชการ"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"order"
+					]
+				}
+			},
+			{
+				"id": "doc-7",
+				"slug": "doc-7",
+				"status": "published",
+				"data": {
+					"title": "คำสั่ง สตง. ที่ 529/2569 เรื่อง การปฏิบัติราชการ ณ ที่พักอาศัย (WFH) (ส่วนกลาง)",
+					"excerpt": "คำสั่ง สตง. ที่ 529/2569 เรื่อง การปฏิบัติราชการ ณ ที่พักอาศัย (WFH) (ส่วนกลาง)",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "คำสั่ง สตง. ที่ 529/2569 เรื่อง การปฏิบัติราชการ ณ ที่พักอาศัย (WFH) (ส่วนกลาง)"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"order"
+					]
+				}
+			},
+			{
+				"id": "doc-8",
+				"slug": "doc-8",
+				"status": "published",
+				"data": {
+					"title": "หนังสือ สตง. ที่ ตผ 0014-ว 3307 เรื่อง การจัดทำข้อตกลงการปฏิบัติราชการประจำปีงบประมาณ 2570 รอบที่ 1",
+					"excerpt": "หนังสือ สตง. ที่ ตผ 0014-ว 3307 เรื่อง การจัดทำข้อตกลงการปฏิบัติราชการประจำปีงบประมาณ 2570 รอบที่ 1",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "หนังสือ สตง. ที่ ตผ 0014-ว 3307 เรื่อง การจัดทำข้อตกลงการปฏิบัติราชการประจำปีงบประมาณ 2570 รอบที่ 1"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"memo"
+					]
+				}
+			},
+			{
+				"id": "doc-9",
+				"slug": "doc-9",
+				"status": "published",
+				"data": {
+					"title": "ประกาศ สตง. เรื่อง รายชื่อผู้มีสิทธิเข้ารับการคัดเลือก",
+					"excerpt": "ประกาศ สตง. เรื่อง รายชื่อผู้มีสิทธิเข้ารับการคัดเลือก",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "ประกาศ สตง. เรื่อง รายชื่อผู้มีสิทธิเข้ารับการคัดเลือก"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"announcement"
+					]
+				}
+			},
+			{
+				"id": "doc-10",
+				"slug": "doc-10",
+				"status": "published",
+				"data": {
+					"title": "ระเบียบ สตง. ว่าด้วยการลาของข้าราชการ พ.ศ. 2569",
+					"excerpt": "ระเบียบ สตง. ว่าด้วยการลาของข้าราชการ พ.ศ. 2569",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "ระเบียบ สตง. ว่าด้วยการลาของข้าราชการ พ.ศ. 2569"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"regulation"
+					]
+				}
+			},
+			{
+				"id": "doc-11",
+				"slug": "doc-11",
+				"status": "published",
+				"data": {
+					"title": "หลักเกณฑ์และวิธีการประเมินผลการปฏิบัติราชการ",
+					"excerpt": "หลักเกณฑ์และวิธีการประเมินผลการปฏิบัติราชการ",
+					"content": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"_key": "b0",
+							"children": [
+								{
+									"_type": "span",
+									"_key": "s0",
+									"text": "หลักเกณฑ์และวิธีการประเมินผลการปฏิบัติราชการ"
+								}
+							]
+						}
+					]
+				},
+				"taxonomies": {
+					"category": [
+						"criteria"
+					]
+				}
+			}
+		],
+		"events": [
+			{
+				"id": "event-1",
+				"slug": "event-1",
+				"status": "published",
+				"data": {
+					"title": "วันนวมินทรมหาราช",
+					"event_date": "2026-10-13T00:00:00.000Z",
+					"description": "(วันคล้ายวันสวรรคต พระบาทสมเด็จพระบรมชนกาธิเบศร มหาภูมิพลอดุลยเดชมหาราช บรมนาถบพิตร) – หยุดราชการทั่วประเทศ",
+					"holiday": true
+				}
+			},
+			{
+				"id": "event-2",
+				"slug": "event-2",
+				"status": "published",
+				"data": {
+					"title": "วันหยุดราชการกรณีพิเศษ",
+					"event_date": "2026-10-16T00:00:00.000Z",
+					"description": "เฉพาะหน่วยงานราชการในพื้นที่กรุงเทพมหานคร เนื่องในการประชุมประจำปี IMF-WBG",
+					"holiday": true
+				}
+			},
+			{
+				"id": "event-3",
+				"slug": "event-3",
+				"status": "published",
+				"data": {
+					"title": "วันปิยมหาราช",
+					"event_date": "2026-10-23T00:00:00.000Z",
+					"description": "(วันคล้ายวันสวรรคต พระบาทสมเด็จพระจุลจอมเกล้าเจ้าอยู่หัว) – หยุดราชการทั่วประเทศ",
+					"holiday": true
+				}
+			},
+			{
+				"id": "event-4",
+				"slug": "event-4",
+				"status": "published",
+				"data": {
+					"title": "เปิดรับสมัคร วิชาการ ชำนาญการ",
+					"event_date": "2026-10-30T00:00:00.000Z",
+					"description": "รับสมัครตั้งแต่วันที่ 30 ต.ค. – 6 พ.ย. 2569",
+					"holiday": false
+				}
+			}
+		]
+	}
+}

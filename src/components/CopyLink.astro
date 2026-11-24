@@ -1,0 +1,45 @@
+---
+import Icon from "./Icon.astro";
+
+/**
+ * "คัดลอกลิงก์" button: copies the full address of this page plus `target` (e.g. "#recruit-x"),
+ * or of `target` itself when it is a path. The script that handles every such button is in Base.
+ */
+interface Props {
+	target?: string;
+	label?: string;
+}
+const { target = "", label = "คัดลอกลิงก์" } = Astro.props;
+---
+
+<button type="button" class="copy-link" data-copy-link={target} title="คัดลอกลิงก์ของรายการนี้ ไปวางที่อื่นได้">
+	<Icon name="link" size={13} />
+	<span data-copy-label>{label}</span>
+</button>
+
+<style>
+	.copy-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 3px 10px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: var(--color-surface);
+		font: inherit;
+		font-size: 0.75rem;
+		color: var(--color-muted);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.copy-link:hover {
+		border-color: var(--color-primary);
+		color: var(--color-primary);
+	}
+
+	.copy-link.is-copied {
+		border-color: #13804a;
+		color: #13804a;
+	}
+</style>

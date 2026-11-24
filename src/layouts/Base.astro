@@ -1,0 +1,1251 @@
+---
+import { siteLink } from "../utils/site-link";
+import FilePreview from "../components/FilePreview.astro";
+import { getEmDashCollection, getMenuWithCacheHint, getSiteSettingsWithCacheHint } from "emdash";
+import { EmDashHead, EmDashBodyStart, EmDashBodyEnd } from "emdash/ui";
+import { createPublicPageContext } from "emdash/page";
+import Icon from "../components/Icon.astro";
+import Logo from "../components/Logo.astro";
+import { getSiteInfo, mediaUrl } from "../utils/site-info";
+import { resolveStarterSiteIdentity } from "../utils/site-identity";
+import { bangkokParts } from "../utils/thai-date";
+import { countVisit } from "../utils/visits";
+import "../styles/theme.css";
+
+interface Props {
+	title: string;
+	pageTitle?: string | null;
+	description?: string | null;
+	image?: string | null;
+	canonical?: string | null;
+	/** Pass content reference for plugin page contributions on content pages */
+	content?: { collection: string; id: string; slug?: string | null };
+	/** Render the slot edge-to-edge instead of inside the page container */
+	fullWidth?: boolean;
+}
+
+const { title, pageTitle, description, image, canonical, content, fullWidth } =
+	Astro.props;
+const [settingsResult, menuResult, pagesResult, info, aboutTabsResult, structureTabsResult, footerMenuResult] = await Promise.all([
+	getSiteSettingsWithCacheHint(),
+	getMenuWithCacheHint("primary"),
+	getEmDashCollection("pages", { limit: 100, orderBy: { created_at: "asc" } }),
+	getSiteInfo(),
+	getEmDashCollection("about_tabs", { limit: 50 }),
+	getEmDashCollection("structure_tabs", { limit: 50 }),
+	getMenuWithCacheHint("footer"),
+]);
+if (Astro.cache?.enabled) {
+	Astro.cache.set(settingsResult.cacheHint);
+	Astro.cache.set(menuResult.cacheHint);
+	Astro.cache.set(pagesResult.cacheHint);
+	Astro.cache.set(info.cacheHint);
+	Astro.cache.set(aboutTabsResult.cacheHint);
+	Astro.cache.set(structureTabsResult.cacheHint);
+	Astro.cache.set(footerMenuResult.cacheHint);
+}
+// Footer links (นโยบายเว็บไซต์ …) come from Menus → "footer", editable in admin.
+const footerLinks = footerMenuResult.data?.items ?? [];
+
+const { siteTitle, siteTagline, siteLogo } = resolveStarterSiteIdentity(
+	settingsResult.data,
+);
+const titleIncludesSiteName =
+	title === siteTitle ||
+	title.endsWith(` | ${siteTitle}`) ||
+	title.endsWith(` — ${siteTitle}`);
+const fullTitle = titleIncludesSiteName ? title : `${title} — ${siteTitle}`;
+const pageDescription = description ?? siteTagline;
+
+// Main nav follows the drag-and-drop order in Menus → primary. Page items always show the
+// page's current title; pages ticked "ซ่อนจากเมนูหลัก" are left out. Published pages not yet
+// in the menu are appended at the end, so a new page shows up without extra steps.
+type NavItem = { label: string; url: string; target?: string | null; children?: { label: string; url: string }[] };
+const pageUrl = (slug: string) => `/${encodeURIComponent(slug)}`;
+const sameUrl = (a: string, b: string) => {
+	const norm = (u: string) => {
+		try {
+			return decodeURI(u).replace(/\/$/, "") || "/";
+		} catch {
+			return u;
+		}
+	};
+	return norm(a) === norm(b);
+};
+const visiblePages = pagesResult.entries.filter((p) => !p.data.hide_from_menu);
+const navItems: NavItem[] = [];
+const placedPages = new Set<string>();
+for (const item of menuResult.data?.items ?? []) {
+	// A menu item with items nested under it (dragged in, in Menus) becomes a dropdown group.
+	if (item.children?.length) {
+		const children: { label: string; url: string }[] = [];
+		for (const child of item.children) {
+			const page = pagesResult.entries.find((p) => sameUrl(pageUrl(p.id), child.url));
+			if (page) {
+				if (page.data.hide_from_menu || placedPages.has(page.id)) continue;
+				placedPages.add(page.id);
+				children.push({ label: page.data.title, url: pageUrl(page.id) });
+			} else children.push({ label: child.label, url: siteLink(child.url) });
+		}
+		if (children.length) navItems.push({ label: item.label, url: siteLink(item.url), children });
+		continue;
+	}
+	const page = pagesResult.entries.find((p) => sameUrl(pageUrl(p.id), item.url));
+	if (page) {
+		if (page.data.hide_from_menu || placedPages.has(page.id)) continue;
+		placedPages.add(page.id);
+		navItems.push({ label: page.data.title, url: pageUrl(page.id), target: item.target });
+	} else if (!navItems.some((n) => sameUrl(n.url, item.url))) {
+		navItems.push({ label: item.label, url: siteLink(item.url), target: item.target });
+	}
+}
+for (const page of visiblePages) {
+	if (!placedPages.has(page.id)) navItems.push({ label: page.data.title, url: pageUrl(page.id) });
+}
+if (!navItems.some((n) => n.url === "/")) navItems.unshift({ label: "หน้าหลัก", url: "/" });
+
+// The pages showing "แท็บหน้าเกี่ยวกับเรา" and "แท็บหน้าโครงสร้าง" get a submenu: one link per tab
+// (page#tab), in tab order.
+const addTabSubmenu = (
+	page: (typeof pagesResult.entries)[number] | undefined,
+	tabEntries: { id: string; data: { title: string; sort_order?: number | null } }[],
+) => {
+	if (!page) return;
+	const item = navItems.find((n) => sameUrl(n.url, pageUrl(page.id)));
+	const tabs = [...tabEntries].sort((a, b) => (a.data.sort_order ?? 999) - (b.data.sort_order ?? 999));
+	if (item && tabs.length > 0)
+		item.children = tabs.map((t) => ({ label: t.data.title, url: `${pageUrl(page.id)}#${encodeURIComponent(t.id)}` }));
+};
+addTabSubmenu(pagesResult.entries.find((p) => p.data.show_about_tabs), aboutTabsResult.entries);
+addTabSubmenu(pagesResult.entries.find((p) => p.data.show_structure_tabs), structureTabsResult.entries);
+
+const pathname = Astro.url.pathname.replace(/\/$/, "") || "/";
+const isActive = (url: string) =>
+	url === "/"
+		? pathname === "/"
+		: pathname === url ||
+			pathname.startsWith(`${url}/`) ||
+			// คลังข้อมูล (/posts) also covers its category and tag pages
+			(url === "/posts" && (pathname.startsWith("/category/") || pathname.startsWith("/tag/")));
+// A dropdown is highlighted when you're on one of its own pages. Links into a part of the homepage
+// (e.g. "/#news") don't count, so on the homepage only "หน้าหลัก" lights up.
+const groupActive = (item: NavItem) =>
+	(item.url !== "#" && isActive(item.url)) ||
+	!!item.children?.some((c) => {
+		const path = c.url.split("#")[0] || "/";
+		return path !== "/" && isActive(path);
+	});
+
+const brandName = info.site_name || siteTitle;
+const logoSrc = mediaUrl(info.logo) ?? siteLogo?.url;
+const logoAlt = info.logo?.alt || siteLogo?.alt || brandName;
+const logoRound = info.logo_shape !== "ตามรูปต้นฉบับ";
+const searchQuery = pathname === "/search" ? (Astro.url.searchParams.get("q") ?? "") : "";
+
+const visits = info.show_visitor_counter ? countVisit(Astro.cookies) : null;
+const thaiYear = bangkokParts(new Date()).year + 543;
+
+const pageCtx = createPublicPageContext({
+	Astro,
+	kind: content ? "content" : "custom",
+	pageType: "website",
+	title: fullTitle,
+	pageTitle: pageTitle ?? title,
+	description: pageDescription,
+	canonical,
+	image,
+	content,
+	siteName: siteTitle,
+});
+// "สีป้ายสถานะใน footer"
+const BADGE_COLORS: Record<string, string> = {
+	เหลือง: "#d9a400",
+	เขียว: "#1e9e5a",
+	แดง: "#d64545",
+	น้ำเงิน: "#2b6fd6",
+	ส้ม: "#ee7a14",
+	ม่วง: "#8b5cc7",
+	เทา: "#7d8e97",
+};
+const badgeColor = BADGE_COLORS[info.status_badge_color as string] ?? BADGE_COLORS["เหลือง"];
+---
+
+<!doctype html>
+<html lang="th">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>{fullTitle}</title>
+		<link href="/fonts/k2d.css" rel="stylesheet" />
+		<EmDashHead page={pageCtx} />
+	</head>
+	<body>
+		<EmDashBodyStart page={pageCtx} />
+
+		<header class="site-header">
+			<div class="container header-inner">
+				<a href="/" class="brand">
+					{logoSrc ? <img src={logoSrc} alt={logoAlt} class:list={["brand-logo", { round: logoRound }]} /> : <Logo size={44} />}
+					<span class="brand-text">
+						<span class="brand-name">{brandName}</span>
+						<span class="brand-sub">{info.org_name_en}</span>
+					</span>
+				</a>
+
+				<button class="icon-btn menu-toggle" type="button" aria-label="เปิดเมนู" aria-expanded="false">
+					<Icon name="menu" />
+				</button>
+
+				<nav class="main-nav" aria-label="เมนูหลัก">
+					<ul>
+						{
+							navItems.map((item) =>
+								item.children ? (
+									<li class="has-sub" data-sub>
+										<button
+											type="button"
+											class:list={["sub-toggle", { active: groupActive(item) }]}
+											aria-expanded="false"
+											aria-haspopup="true"
+										>
+											{item.label}
+											<Icon name="chevron-right" size={13} />
+										</button>
+										<ul class="sub-menu">
+											{item.children.map((c) => (
+												<li>
+													<a href={c.url}>{c.label}</a>
+												</li>
+											))}
+										</ul>
+									</li>
+								) : (
+									<li>
+										<a
+											href={item.url}
+											target={item.target}
+											rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
+											class:list={{ active: isActive(item.url) }}
+											aria-current={isActive(item.url) ? "page" : undefined}
+										>
+											{item.label}
+										</a>
+									</li>
+								),
+							)
+						}
+					</ul>
+				</nav>
+
+				<button class="search-toggle" type="button" aria-label="ค้นหาทั้งเว็บไซต์" aria-expanded="false" aria-controls="site-search">
+					<Icon name="search" size={22} />
+					<span>ค้นหา</span>
+				</button>
+			</div>
+			<div class="search-panel" id="site-search" hidden>
+				<div class="container">
+					<form action="/search" method="get" class="search-form" role="search">
+						<span class="search-form-icon"><Icon name="search" size={22} /></span>
+						<input
+							type="search"
+							name="q"
+							value={searchQuery}
+							placeholder="ค้นหาทั้งเว็บไซต์ เช่น ประกาศรับสมัคร คำสั่ง ข่าว แบบฟอร์ม วันหยุด..."
+							aria-label="คำค้นหา"
+							autocomplete="off"
+						/>
+						<button type="submit" class="search-submit">ค้นหา</button>
+					</form>
+					<div class="search-results" hidden></div>
+				</div>
+			</div>
+		</header>
+
+		<main>
+			{
+				fullWidth ? (
+					<slot />
+				) : (
+					<div class="container page-shell">
+						<slot />
+					</div>
+				)
+			}
+		</main>
+		<FilePreview />
+
+		<footer class="site-footer">
+			<div class="container">
+				<div class="ft-org">
+					<a href="/" class="ft-logo" aria-label={brandName}>
+						{logoSrc ? <img src={logoSrc} alt={logoAlt} class:list={{ round: logoRound }} /> : <Logo size={72} />}
+					</a>
+					<div class="ft-info">
+						<p class="ft-name">{brandName} สำนักงานการตรวจเงินแผ่นดิน</p>
+						{info.address && <p>{info.address}</p>}
+						{(info.phone || info.email) && (
+							<p class="ft-contact">
+								{info.phone && (
+									<span>
+										<span class="ft-icon" aria-hidden="true"><Icon name="phone" size={16} /></span>
+										<span class="sr-only">โทรศัพท์</span>
+										{/* "0 2271 8000 ต่อ 1204" dials the main number, then the extension after a pause. */}
+										<a href={`tel:${info.phone.split(/\s*(?:ต่อ|#|ext\.?)\s*/i).map((x) => x.replace(/[^\d+]/g, "")).filter(Boolean).join(",")}`}>{info.phone}</a>
+									</span>
+								)}
+								{info.email && (
+									<span>
+										<span class="ft-icon" aria-hidden="true"><Icon name="mail" size={16} /></span>
+										<span class="sr-only">อีเมล</span>
+										<a href={`mailto:${info.email}`}>{info.email}</a>
+									</span>
+								)}
+							</p>
+						)}
+						{info.line_id && (
+							<p>
+								LINE:{" "}
+								{info.line_url ? (
+									<a href={info.line_url} target="_blank" rel="noopener noreferrer">{info.line_id}</a>
+								) : (
+									info.line_id
+								)}
+							</p>
+						)}
+					</div>
+				</div>
+
+				{
+					footerLinks.length > 0 && (
+						<nav class="ft-links" aria-label="ลิงก์ท้ายเว็บไซต์">
+							{footerLinks.map((l) => (
+								<a href={siteLink(l.url)} target={l.target || undefined} rel={l.target === "_blank" ? "noopener noreferrer" : undefined}>
+									{l.label}
+								</a>
+							))}
+						</nav>
+					)
+				}
+
+				{info.footer_text && <p class="ft-note">{info.footer_text}</p>}
+
+				<div class="ft-bottom">
+					<p>© สงวนลิขสิทธิ์ {thaiYear} {brandName} สำนักงานการตรวจเงินแผ่นดิน</p>
+					<div class="ft-meta">
+						{info.status_badge && <span class="dev-pill" style={`--pill: ${badgeColor}`}><span class="dot"></span>{info.status_badge}</span>}
+						{
+							visits && (
+								<>
+									<script is:inline define:vars={{ c: visits.cookie }}>
+										document.cookie = c + "; path=/; max-age=86400; samesite=lax";
+									</script>
+									<dl class="visits" aria-label="จำนวนผู้เข้าชม">
+										<dt>ผู้เข้าชม</dt>
+										<div><dt>วันนี้</dt><dd>{visits.today.toLocaleString("th-TH")}</dd></div>
+										<div><dt>เดือนนี้</dt><dd>{visits.month.toLocaleString("th-TH")}</dd></div>
+										<div><dt>ทั้งหมด</dt><dd>{visits.total.toLocaleString("th-TH")}</dd></div>
+									</dl>
+								</>
+							)
+						}
+					</div>
+				</div>
+			</div>
+		</footer>
+
+		<EmDashBodyEnd page={pageCtx} />
+
+		<script>
+			const header = document.querySelector(".site-header");
+			const menuBtn = header?.querySelector<HTMLButtonElement>(".menu-toggle");
+			const searchBtn = header?.querySelector<HTMLButtonElement>(".search-toggle");
+			const panel = header?.querySelector<HTMLElement>(".search-panel");
+
+			// Submenus (e.g. เกี่ยวกับเรา): click to open, click outside / Esc / pick an item to close.
+			const subs = [...(header?.querySelectorAll<HTMLElement>("[data-sub]") ?? [])];
+			const closeSubs = (except?: HTMLElement) =>
+				subs.forEach((li) => {
+					if (li === except) return;
+					li.classList.remove("open");
+					li.querySelector(".sub-toggle")?.setAttribute("aria-expanded", "false");
+				});
+			subs.forEach((li) => {
+				const btn = li.querySelector<HTMLButtonElement>(".sub-toggle")!;
+				btn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					const open = !li.classList.contains("open");
+					closeSubs(li);
+					li.classList.toggle("open", open);
+					btn.setAttribute("aria-expanded", String(open));
+				});
+				li.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => {
+					closeSubs();
+					header?.classList.remove("nav-open");
+				}));
+			});
+			document.addEventListener("click", (e) => {
+				if (!(e.target as Element).closest?.("[data-sub]")) closeSubs();
+			});
+			document.addEventListener("keydown", (e) => {
+				if (e.key === "Escape") closeSubs();
+			});
+
+			menuBtn?.addEventListener("click", () => {
+				const open = header!.classList.toggle("nav-open");
+				menuBtn.setAttribute("aria-expanded", String(open));
+			});
+
+			const form = panel?.querySelector<HTMLFormElement>(".search-form");
+			const input = form?.querySelector<HTMLInputElement>("input");
+			const results = panel?.querySelector<HTMLElement>(".search-results");
+
+			const setOpen = (open: boolean) => {
+				if (!panel || !searchBtn) return;
+				panel.hidden = !open;
+				searchBtn.setAttribute("aria-expanded", String(open));
+				if (open) input?.focus();
+			};
+			searchBtn?.addEventListener("click", () => setOpen(!!panel?.hidden));
+			document.addEventListener("keydown", (e) => {
+				if (e.key === "Escape" && panel && !panel.hidden) setOpen(false);
+				const typing = e.target instanceof HTMLElement && e.target.closest("input, textarea, [contenteditable]");
+				if (!typing && (e.key === "/" || (e.key === "k" && (e.metaKey || e.ctrlKey)))) {
+					e.preventDefault();
+					setOpen(true);
+				}
+			});
+
+			const escapeHtml = (t: string) =>
+				t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+			const highlight = (text: string, q: string) => {
+				const safe = escapeHtml(text);
+				const i = safe.toLowerCase().indexOf(escapeHtml(q).toLowerCase());
+				return i < 0 ? safe : `${safe.slice(0, i)}<mark>${safe.slice(i, i + escapeHtml(q).length)}</mark>${safe.slice(i + escapeHtml(q).length)}`;
+			};
+
+			type Hit = { typeLabel: string; title: string; snippet: string; url: string; date?: string; image?: string; external?: boolean };
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			let seq = 0;
+
+			const render = (q: string, hits: Hit[]) => {
+				if (!results) return;
+				if (!q) {
+					results.hidden = true;
+					return;
+				}
+				const more = `<a class="sr-footer" href="/search?q=${encodeURIComponent(q)}">ดูผลการค้นหาทั้งหมดสำหรับ “${escapeHtml(q)}” →</a>`;
+				results.innerHTML = hits.length
+					? `<ul>${hits
+							.map(
+								(h) => `<li><a href="${escapeHtml(h.url)}"${h.external ? ' target="_blank" rel="noopener noreferrer"' : ""}>
+									${h.image ? `<img src="${escapeHtml(h.image)}" alt="" loading="lazy">` : ""}
+									<span class="sr-body">
+										<span class="item-meta"><span class="chip">${escapeHtml(h.typeLabel)}</span>${h.date ? `<span>${escapeHtml(h.date)}</span>` : ""}</span>
+										<span class="sr-title">${highlight(h.title, q)}</span>
+										${h.snippet ? `<span class="sr-snippet">${highlight(h.snippet, q)}</span>` : ""}
+									</span></a></li>`,
+							)
+							.join("")}</ul>${more}`
+					: `<p class="sr-empty">ไม่พบข้อมูลที่ตรงกับ “${escapeHtml(q)}”</p>`;
+				results.hidden = false;
+			};
+
+			input?.addEventListener("input", () => {
+				clearTimeout(timer);
+				const q = input.value.trim();
+				if (!q) return render("", []);
+				timer = setTimeout(async () => {
+					const mine = ++seq;
+					try {
+						const res = await fetch(`/api/search.json?q=${encodeURIComponent(q)}`);
+						const data = (await res.json()) as { results: Hit[] };
+						if (mine === seq) render(q, data.results);
+					} catch {
+						// Network error: the form still submits to /search.
+					}
+				}, 180);
+			});
+
+			input?.addEventListener("keydown", (e) => {
+				if (!results || results.hidden || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+				const links = [...results.querySelectorAll<HTMLAnchorElement>("a")];
+				if (!links.length) return;
+				e.preventDefault();
+				const current = links.findIndex((a) => a.classList.contains("is-focused"));
+				const next = e.key === "ArrowDown" ? (current + 1) % links.length : (current - 1 + links.length) % links.length;
+				links.forEach((a, i) => a.classList.toggle("is-focused", i === next));
+				links[next].scrollIntoView({ block: "nearest" });
+			});
+
+			form?.addEventListener("submit", (e) => {
+				const focused = results?.querySelector<HTMLAnchorElement>("a.is-focused");
+				if (focused) {
+					e.preventDefault();
+					focused.click();
+				} else if (!input?.value.trim()) {
+					e.preventDefault();
+				}
+			});
+
+			if (location.pathname === "/search") setOpen(false);
+		</script>
+		<script>
+			// "คัดลอกลิงก์" buttons (CopyLink.astro): copy this page's address + the item's anchor
+			document.addEventListener("click", async (e) => {
+				const btn = (e.target as Element).closest<HTMLButtonElement>("[data-copy-link]");
+				if (!btn) return;
+				e.preventDefault();
+				e.stopPropagation();
+				const target = btn.dataset.copyLink || "";
+				const url = target.startsWith("#") ? location.origin + location.pathname + target : new URL(target || location.href, location.href).href;
+				let ok = false;
+				try {
+					await navigator.clipboard.writeText(url);
+					ok = true;
+				} catch {
+					const box = document.createElement("textarea");
+					box.value = url;
+					box.style.position = "fixed";
+					box.style.opacity = "0";
+					document.body.appendChild(box);
+					box.select();
+					ok = document.execCommand("copy");
+					box.remove();
+				}
+				const label = btn.querySelector("[data-copy-label]");
+				if (!label) return;
+				const before = label.textContent;
+				label.textContent = ok ? "คัดลอกแล้ว ✓" : url;
+				btn.classList.toggle("is-copied", ok);
+				setTimeout(() => {
+					label.textContent = before;
+					btn.classList.remove("is-copied");
+				}, 1800);
+			});
+		</script>
+	</body>
+</html>
+
+<style>
+	.site-header {
+		position: sticky;
+		top: 0;
+		z-index: 50;
+		background: rgb(255 255 255 / 92%);
+		backdrop-filter: saturate(160%) blur(10px);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.header-inner {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0 12px;
+		padding-top: 12px;
+	}
+
+	.brand {
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex: 1 1 0;
+	}
+
+	.brand-logo {
+		height: 44px;
+		width: auto;
+		max-width: 180px;
+		object-fit: contain;
+	}
+
+	.brand-logo-lg {
+		height: 52px;
+	}
+
+	.brand-logo.round {
+		flex-shrink: 0;
+		width: 44px;
+		max-width: none;
+		aspect-ratio: 1;
+		border-radius: 50%;
+		object-fit: cover;
+		background: #fff;
+		border: 1px solid var(--color-border);
+	}
+
+	.brand-logo-lg.round {
+		width: 52px;
+		border: 2px solid rgb(255 255 255 / 25%);
+	}
+
+	.brand-text {
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
+	}
+
+	.brand-name {
+		font-weight: 700;
+		font-size: 1.1rem;
+		color: var(--color-primary-dark);
+	}
+
+	.brand-sub {
+		font-size: 0.74rem;
+		color: var(--color-muted);
+	}
+
+	.search-toggle {
+		order: 1;
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		height: 44px;
+		padding: 0 20px 0 16px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--color-primary);
+		color: #fff;
+		font: inherit;
+		font-size: 0.95rem;
+		font-weight: 600;
+		cursor: pointer;
+		box-shadow: 0 4px 14px rgb(15 111 135 / 30%);
+		transition: background 0.15s, transform 0.15s;
+	}
+
+	.search-toggle:hover {
+		background: var(--color-primary-dark);
+		transform: translateY(-1px);
+	}
+
+	.search-toggle[aria-expanded="true"] {
+		background: var(--color-primary-dark);
+	}
+
+	.icon-btn.menu-toggle {
+		order: 2;
+		display: none;
+	}
+
+	.main-nav {
+		order: 3;
+		flex-basis: 100%;
+		margin-top: 6px;
+	}
+
+	.main-nav ul {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.main-nav a {
+		position: relative;
+		display: block;
+		padding: 10px 12px 13px;
+		font-size: 0.88rem;
+		font-weight: 500;
+		transition: color 0.2s;
+	}
+
+	.main-nav .sub-toggle {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 10px 12px 13px;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-size: 0.88rem;
+		font-weight: 500;
+		color: inherit;
+		cursor: pointer;
+	}
+
+	.main-nav .sub-toggle :global(svg) {
+		transform: rotate(90deg);
+		transition: transform 0.2s;
+	}
+
+	.main-nav .has-sub.open .sub-toggle :global(svg) {
+		transform: rotate(-90deg);
+	}
+
+	.main-nav .sub-toggle:hover,
+	.main-nav .sub-toggle.active,
+	.main-nav .has-sub.open .sub-toggle {
+		color: var(--color-primary);
+	}
+
+	.main-nav .sub-toggle.active::after {
+		content: "";
+		position: absolute;
+		left: 12px;
+		right: 12px;
+		bottom: 0;
+		height: 3px;
+		border-radius: 3px 3px 0 0;
+		background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+	}
+
+	.main-nav .has-sub {
+		position: relative;
+	}
+
+	.main-nav .sub-menu {
+		display: none;
+		position: absolute;
+		top: 100%;
+		left: 0;
+		z-index: 60;
+		min-width: 240px;
+		margin: 0;
+		padding: 6px;
+		list-style: none;
+		border: 1px solid var(--color-border);
+		border-radius: 14px;
+		background: var(--color-surface);
+		box-shadow: var(--shadow-lg, 0 12px 30px rgb(0 0 0 / 12%));
+	}
+
+	.main-nav .has-sub.open .sub-menu {
+		display: block;
+	}
+
+	.main-nav .sub-menu a {
+		padding: 10px 14px;
+		border-radius: 10px;
+		white-space: nowrap;
+	}
+
+	.main-nav .sub-menu a::before,
+	.main-nav .sub-menu a::after {
+		display: none;
+	}
+
+	.main-nav .sub-menu a:hover {
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+	}
+
+	/* Soft pill behind the label */
+	.main-nav a::before {
+		content: "";
+		position: absolute;
+		inset: 5px 2px 8px;
+		border-radius: 10px;
+		background: var(--color-primary-soft);
+		opacity: 0;
+		transform: scale(0.9);
+		transition: opacity 0.2s, transform 0.2s;
+		z-index: -1;
+	}
+
+	/* Underline that grows from the centre */
+	.main-nav a::after {
+		content: "";
+		position: absolute;
+		left: 12px;
+		right: 12px;
+		bottom: 0;
+		height: 3px;
+		border-radius: 3px 3px 0 0;
+		background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+		transform: scaleX(0);
+		transition: transform 0.25s ease;
+	}
+
+	.main-nav a:hover,
+	.main-nav a:focus-visible {
+		color: var(--color-primary);
+	}
+
+	.main-nav a:hover::before,
+	.main-nav a:focus-visible::before {
+		opacity: 1;
+		transform: scale(1);
+	}
+
+	.main-nav a:hover::after,
+	.main-nav a.active::after {
+		transform: scaleX(1);
+	}
+
+	.main-nav a.active {
+		color: var(--color-primary);
+		font-weight: 600;
+	}
+
+	.main-nav li {
+		position: relative;
+		z-index: 0;
+	}
+
+	.icon-btn {
+		display: inline-grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		border: 0;
+		border-radius: 50%;
+		background: transparent;
+		color: var(--color-primary);
+		cursor: pointer;
+	}
+
+	.icon-btn:hover {
+		background: var(--color-primary-soft);
+	}
+
+	/* Search panel: input spans the full container, edge to edge with the search button */
+	.search-panel {
+		border-top: 1px solid var(--color-border);
+		background: var(--color-surface);
+		padding-block: 16px 18px;
+		box-shadow: 0 12px 24px rgb(16 36 46 / 8%);
+	}
+
+	.search-form {
+		position: relative;
+		display: flex;
+		align-items: center;
+		width: 100%;
+	}
+
+	.search-form-icon {
+		position: absolute;
+		left: 18px;
+		color: var(--color-primary);
+		display: grid;
+		pointer-events: none;
+	}
+
+	.search-form input {
+		flex: 1;
+		min-width: 0;
+		height: 54px;
+		padding: 0 120px 0 54px;
+		border: 2px solid var(--color-primary);
+		border-radius: 999px;
+		font: inherit;
+		font-size: 1.05rem;
+		background: var(--color-surface);
+		color: var(--color-text);
+	}
+
+	.search-form input:focus {
+		outline: none;
+		box-shadow: 0 0 0 4px rgb(43 179 214 / 25%);
+	}
+
+	.search-submit {
+		position: absolute;
+		right: 6px;
+		height: 42px;
+		padding: 0 22px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--color-primary);
+		color: #fff;
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.search-submit:hover {
+		background: var(--color-primary-dark);
+	}
+
+	.search-results {
+		margin-top: 10px;
+		max-height: min(60vh, 520px);
+		overflow-y: auto;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius);
+		background: var(--color-surface);
+	}
+
+	.search-results :global(ul) {
+		list-style: none;
+		margin: 0;
+		padding: 4px 0;
+	}
+
+	.search-results :global(a) {
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		padding: 10px 18px;
+	}
+
+	.search-results :global(a:hover),
+	.search-results :global(a.is-focused) {
+		background: var(--color-primary-soft);
+	}
+
+	.search-results :global(img) {
+		flex-shrink: 0;
+		width: 96px;
+		aspect-ratio: 2.8;
+		object-fit: cover;
+		border-radius: 6px;
+		border: 1px solid var(--color-border);
+	}
+
+	.search-results :global(.sr-body) {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.search-results :global(.sr-title) {
+		font-weight: 600;
+		font-size: 0.92rem;
+	}
+
+	.search-results :global(.sr-snippet) {
+		color: var(--color-muted);
+		font-size: 0.8rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.search-results :global(mark) {
+		background: #fff1c2;
+		color: inherit;
+		border-radius: 3px;
+	}
+
+	.search-results :global(.sr-footer) {
+		display: block;
+		padding: 12px 18px;
+		border-top: 1px solid var(--color-border);
+		color: var(--color-primary);
+		font-weight: 600;
+		font-size: 0.88rem;
+	}
+
+	.search-results :global(.sr-empty) {
+		margin: 0;
+		padding: 18px;
+		color: var(--color-muted);
+		text-align: center;
+	}
+
+	@media (max-width: 860px) {
+		.header-inner {
+			padding-block: 10px;
+		}
+
+		.icon-btn.menu-toggle {
+			display: inline-grid;
+		}
+
+		.main-nav {
+			display: none;
+		}
+
+		.site-header.nav-open .main-nav {
+			display: block;
+		}
+
+		.main-nav ul {
+			flex-direction: column;
+		}
+
+		.main-nav a {
+			padding: 12px 8px;
+			border-bottom: 1px solid var(--color-border);
+		}
+
+		/* phones: the submenu opens in place, indented under its item */
+		.main-nav .sub-toggle {
+			width: 100%;
+			justify-content: space-between;
+			padding: 12px 8px;
+			border-bottom: 1px solid var(--color-border);
+		}
+
+		.main-nav .sub-toggle.active::after {
+			display: none;
+		}
+
+		.main-nav .sub-menu {
+			position: static;
+			min-width: 0;
+			padding: 0 0 0 14px;
+			border: 0;
+			border-radius: 0;
+			box-shadow: none;
+			background: none;
+		}
+
+		.main-nav .sub-menu a {
+			border-radius: 0;
+		}
+
+		.main-nav a::after {
+			left: 0;
+			right: auto;
+			top: 10px;
+			bottom: 10px;
+			width: 3px;
+			height: auto;
+			border-radius: 0 3px 3px 0;
+			transform: scaleY(0);
+		}
+
+		.main-nav a:hover::after,
+		.main-nav a.active::after {
+			transform: scaleY(1);
+		}
+	}
+
+	@media (max-width: 560px) {
+		.brand-sub {
+			display: none;
+		}
+
+		.search-toggle {
+			width: 44px;
+			padding: 0;
+			justify-content: center;
+		}
+
+		.search-toggle span {
+			display: none;
+		}
+
+		.search-form input {
+			padding-right: 18px;
+		}
+
+		.search-submit {
+			display: none;
+		}
+	}
+
+	/* Footer — light, government-site style: logo + contact, policy links, copyright */
+	.site-footer {
+		margin-top: 56px;
+		padding-top: 36px;
+		border-top: 1px solid var(--color-border);
+		background: linear-gradient(180deg, #f3f8fc, #e8f1f8);
+		color: var(--color-text);
+	}
+
+	.ft-org {
+		display: flex;
+		align-items: flex-start;
+		gap: 28px;
+	}
+
+	.ft-logo {
+		flex-shrink: 0;
+		display: block;
+	}
+
+	.ft-logo img {
+		display: block;
+		width: 96px;
+		height: 96px;
+		object-fit: contain;
+	}
+
+	.ft-logo img.round {
+		border-radius: 50%;
+		background: #fff;
+		box-shadow: 0 2px 10px rgb(10 30 40 / 8%);
+	}
+
+	.ft-info p {
+		margin: 0;
+		line-height: 1.75;
+		color: var(--color-muted);
+		font-size: 0.95rem;
+	}
+
+	.ft-info .ft-name {
+		margin-bottom: 10px;
+		font-size: 1.15rem;
+		font-weight: 700;
+		color: var(--color-text);
+	}
+
+	.ft-contact {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 28px;
+		margin-top: 8px !important;
+	}
+
+	.ft-contact > span {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		white-space: nowrap;
+	}
+
+	/* round icon badges for phone / email */
+	.ft-icon {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 34px;
+		height: 34px;
+		border-radius: 50%;
+		background: var(--color-primary);
+		color: #fff;
+		box-shadow: 0 2px 8px rgb(15 111 135 / 22%);
+	}
+
+	.ft-info a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.ft-info a:hover {
+		color: var(--color-primary);
+		text-decoration: underline;
+	}
+
+	/* "นโยบายเว็บไซต์ | นโยบายคุ้มครองข้อมูลส่วนบุคคล" — one line, divided by bars; more links wrap */
+	.ft-links {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		row-gap: 8px;
+		margin-top: 24px;
+	}
+
+	.ft-links a + a::before {
+		content: "|";
+		display: inline-block;
+		margin: 0 16px;
+		font-weight: 400;
+		color: var(--color-border-strong, #b9cad2);
+		text-decoration: none;
+	}
+
+	.ft-links a {
+		font-size: 1.05rem;
+		font-weight: 700;
+		color: var(--color-primary);
+		text-decoration: none;
+	}
+
+	.ft-links a:hover {
+		color: var(--color-primary-dark);
+		text-decoration: underline;
+	}
+
+	.ft-note {
+		margin: 22px 0 0;
+		font-size: 0.9rem;
+		color: var(--color-muted);
+	}
+
+	.ft-bottom {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px 24px;
+		margin-top: 22px;
+		padding-block: 16px 24px;
+		border-top: 1px solid rgb(15 111 135 / 12%);
+	}
+
+	.ft-bottom > p {
+		margin: 0;
+		font-size: 0.9rem;
+		color: var(--color-text);
+	}
+
+	.ft-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px 16px;
+	}
+
+	.dev-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 12px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+		font-size: 0.78rem;
+		color: var(--color-muted);
+	}
+
+	.dev-pill {
+		border-color: color-mix(in srgb, var(--pill, var(--color-gold)) 45%, var(--color-border));
+		background: color-mix(in srgb, var(--pill, var(--color-gold)) 10%, #fff);
+		color: color-mix(in srgb, var(--pill, var(--color-gold)) 70%, #1a2a30);
+		font-weight: 600;
+	}
+
+	.dev-pill .dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--pill, var(--color-gold));
+	}
+
+	.visits {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0;
+		font-size: 0.78rem;
+		color: var(--color-muted);
+	}
+
+	.visits div {
+		display: flex;
+		gap: 5px;
+		padding: 3px 10px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+	}
+
+	.visits dd {
+		margin: 0;
+		font-weight: 700;
+		color: var(--color-primary-dark);
+	}
+
+	@media (max-width: 760px) {
+		.ft-org {
+			gap: 16px;
+		}
+
+		.ft-logo img {
+			width: 64px;
+			height: 64px;
+		}
+
+		/* too narrow for one line: stack the links without the bars */
+		.ft-links {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+
+		.ft-links a + a::before {
+			display: none;
+		}
+
+	}
+</style>

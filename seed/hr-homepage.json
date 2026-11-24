@@ -1,0 +1,325 @@
+{
+	"$schema": "https://emdashcms.com/seed.schema.json",
+	"version": "1",
+	"meta": {
+		"name": "HR SAO homepage settings",
+		"description": "Editable homepage blocks",
+		"author": "HR SAO"
+	},
+	"collections": [
+		{
+			"slug": "quick_links",
+			"label": "ลิงก์ระบบงาน",
+			"labelSingular": "ลิงก์ระบบงาน",
+			"supports": [
+				"drafts"
+			],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "ชื่อที่แสดง",
+					"type": "string",
+					"required": true
+				},
+				{
+					"slug": "url",
+					"label": "ลิงก์ (URL)",
+					"type": "url",
+					"required": true
+				},
+				{
+					"slug": "icon",
+					"label": "ไอคอน",
+					"type": "select",
+					"validation": {
+						"options": [
+							"เอกสาร",
+							"คอมพิวเตอร์",
+							"ปฏิทิน",
+							"อีเมล",
+							"อินเทอร์เน็ต",
+							"อาคาร",
+							"ผู้ใช้",
+							"ลิงก์"
+						]
+					}
+				},
+				{
+					"slug": "icon_image",
+					"label": "รูปไอคอน (ใช้แทนไอคอนด้านบน ถ้าอัปโหลด)",
+					"type": "image"
+				},
+				{
+					"slug": "sort_order",
+					"label": "ลำดับการแสดง (น้อยขึ้นก่อน)",
+					"type": "integer"
+				},
+				{
+					"slug": "new_tab",
+					"label": "เปิดในแท็บใหม่",
+					"type": "boolean"
+				}
+			]
+		},
+		{
+			"slug": "site_info",
+			"label": "ข้อมูลเว็บไซต์ / หน้าแรก",
+			"labelSingular": "ข้อมูลเว็บไซต์",
+			"supports": [
+				"drafts"
+			],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "ชื่อรายการ (สำหรับ admin)",
+					"type": "string",
+					"required": true
+				},
+				{
+					"slug": "logo",
+					"label": "โลโก้มุมซ้ายบน (เว้นว่าง = โลโก้ HR เริ่มต้น)",
+					"type": "image"
+				},
+				{
+					"slug": "logo_shape",
+					"label": "รูปทรงโลโก้",
+					"type": "select",
+					"validation": {
+						"options": [
+							"วงกลม",
+							"ตามรูปต้นฉบับ"
+						]
+					}
+				},
+				{
+					"slug": "site_name",
+					"label": "ชื่อหน่วยงานข้างโลโก้ (เว้นว่าง = ชื่อเว็บไซต์ใน Settings)",
+					"type": "string"
+				},
+				{
+					"slug": "hero_image",
+					"label": "ภาพหน้าแรก (Hero) — ถ้าไม่มีข้อความทั้งสองช่อง ภาพจะแสดงสีปกติไม่มีเงาทับ",
+					"type": "image"
+				},
+				{
+					"slug": "hero_title",
+					"label": "ข้อความหัวข้อบนภาพ Hero (เว้นว่าง = ไม่แสดง)",
+					"type": "string"
+				},
+				{
+					"slug": "hero_subtitle",
+					"label": "ข้อความรองใต้หัวข้อ (เว้นว่าง = ไม่แสดง)",
+					"type": "text"
+				},
+				{
+					"slug": "org_name_en",
+					"label": "ชื่อหน่วยงานภาษาอังกฤษ",
+					"type": "string"
+				},
+				{
+					"slug": "heading_performance",
+					"label": "หัวข้อ: ผลการดำเนินการ (ชื่อเดือนจะต่อท้ายอัตโนมัติ)",
+					"type": "string"
+				},
+				{
+					"slug": "heading_recruitments",
+					"label": "หัวข้อ: ประกาศรับสมัครสอบ",
+					"type": "string"
+				},
+				{
+					"slug": "heading_news",
+					"label": "หัวข้อ: ข่าวประชาสัมพันธ์",
+					"type": "string"
+				},
+				{
+					"slug": "heading_documents",
+					"label": "หัวข้อ: ประกาศ คำสั่ง ระเบียบ",
+					"type": "string"
+				},
+				{
+					"slug": "heading_calendar",
+					"label": "หัวข้อ: ปฏิทินกิจกรรม",
+					"type": "string"
+				},
+				{
+					"slug": "news_limit",
+					"label": "จำนวนข่าวที่แสดง",
+					"type": "integer"
+				},
+				{
+					"slug": "documents_limit",
+					"label": "จำนวนเอกสารที่แสดงต่อแท็บ",
+					"type": "integer"
+				},
+				{
+					"slug": "new_badge_days",
+					"label": "แสดงป้าย \"ใหม่\" กี่วัน",
+					"type": "integer"
+				},
+				{
+					"slug": "footer_text",
+					"label": "ข้อความใน footer",
+					"type": "text"
+				},
+				{
+					"slug": "status_badge",
+					"label": "ป้ายสถานะใน footer (เว้นว่าง = ไม่แสดง)",
+					"type": "string"
+				},
+				{
+					"slug": "show_visitor_counter",
+					"label": "แสดงจำนวนผู้เข้าชม",
+					"type": "boolean"
+				},
+				{
+					"slug": "contact_heading",
+					"label": "หัวข้อกล่องติดต่อ",
+					"type": "string"
+				},
+				{
+					"slug": "address",
+					"label": "ที่อยู่",
+					"type": "text"
+				},
+				{
+					"slug": "phone",
+					"label": "โทรศัพท์",
+					"type": "string"
+				},
+				{
+					"slug": "email",
+					"label": "อีเมล",
+					"type": "string"
+				},
+				{
+					"slug": "line_id",
+					"label": "LINE ID หรือชื่อบัญชี (เช่น @hrsao) — เว้นว่าง = ไม่แสดง",
+					"type": "string"
+				},
+				{
+					"slug": "line_url",
+					"label": "ลิงก์ LINE (เช่น https://line.me/R/ti/p/@hrsao)",
+					"type": "url"
+				}
+			]
+		}
+	],
+	"content": {
+		"quick_links": [
+			{
+				"id": "ql-1",
+				"slug": "e-office",
+				"status": "published",
+				"data": {
+					"title": "e-Office",
+					"url": "https://example.go.th/e-office",
+					"icon": "เอกสาร",
+					"sort_order": 1,
+					"new_tab": true
+				}
+			},
+			{
+				"id": "ql-2",
+				"slug": "dpis6",
+				"status": "published",
+				"data": {
+					"title": "DPIS6",
+					"url": "https://example.go.th/dpis",
+					"icon": "คอมพิวเตอร์",
+					"sort_order": 2,
+					"new_tab": true
+				}
+			},
+			{
+				"id": "ql-3",
+				"slug": "meeting-room",
+				"status": "published",
+				"data": {
+					"title": "จองห้องประชุม",
+					"url": "https://example.go.th/meeting",
+					"icon": "ปฏิทิน",
+					"sort_order": 3,
+					"new_tab": true
+				}
+			},
+			{
+				"id": "ql-4",
+				"slug": "email",
+				"status": "published",
+				"data": {
+					"title": "E-Mail",
+					"url": "https://example.go.th/mail",
+					"icon": "อีเมล",
+					"sort_order": 4,
+					"new_tab": true
+				}
+			},
+			{
+				"id": "ql-5",
+				"slug": "intranet",
+				"status": "published",
+				"data": {
+					"title": "Intranet",
+					"url": "https://example.go.th/intranet",
+					"icon": "อินเทอร์เน็ต",
+					"sort_order": 5,
+					"new_tab": true
+				}
+			},
+			{
+				"id": "ql-6",
+				"slug": "sao-website",
+				"status": "published",
+				"data": {
+					"title": "SAO Website",
+					"url": "https://www.audit.go.th",
+					"icon": "อาคาร",
+					"sort_order": 6,
+					"new_tab": true
+				}
+			}
+		],
+		"site_info": [
+			{
+				"id": "site-main",
+				"slug": "main",
+				"status": "published",
+				"data": {
+					"title": "ข้อมูลเว็บไซต์หลัก",
+					"org_name_en": "Human Resource Management Office",
+					"heading_recruitments": "ประกาศรับสมัครสอบ",
+					"heading_news": "ข่าวประชาสัมพันธ์",
+					"heading_documents": "ประกาศ คำสั่ง ระเบียบ หลักเกณฑ์ บันทึกข้อความ",
+					"heading_calendar": "ปฏิทินกิจกรรม",
+					"news_limit": 9,
+					"documents_limit": 8,
+					"new_badge_days": 14,
+					"footer_text": "พัฒนางานบริหารและพัฒนาบุคลากร เพื่อให้บุคลากร สตง. ทำงานได้อย่างมีความสุข",
+					"status_badge": "เว็บไซต์กำลังพัฒนา",
+					"show_visitor_counter": true,
+					"contact_heading": "ติดต่อสำนักงาน",
+					"address": "สำนักงานการตรวจเงินแผ่นดิน ถนนพระรามที่ 6 แขวงพญาไท เขตพญาไท กรุงเทพมหานคร 10400",
+					"phone": "0 2271 8000",
+					"email": "hr@example.go.th"
+				}
+			}
+		]
+	},
+	"taxonomies": [
+		{
+			"name": "category",
+			"label": "Categories",
+			"labelSingular": "Category",
+			"hierarchical": true,
+			"collections": [
+				"posts"
+			],
+			"terms": [
+				{
+					"slug": "documents",
+					"label": "เอกสารเผยแพร่ (หมวดย่อยจะเป็นแท็บบนหน้าแรก)"
+				}
+			]
+		}
+	]
+}

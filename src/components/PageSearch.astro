@@ -1,0 +1,441 @@
+---
+import Icon from "./Icon.astro";
+
+/**
+ * "ค้นหาในหน้านี้": searches every piece of text on the current page — including closed tabs,
+ * dropdowns, collapsed charts and other hidden panels — lists the matches with their context,
+ * and on click opens whatever is hiding the match, scrolls to it and highlights it.
+ */
+---
+
+<section class="ps" data-page-search aria-label="ค้นหาในหน้านี้">
+	<label class="ps-box">
+		<Icon name="search" size={18} />
+		<span class="sr-only">ค้นหาในหน้านี้</span>
+		<input type="search" placeholder="ค้นหาในหน้านี้ เช่น ชื่อสำนัก ชื่อไฟล์ ชื่อบุคคล เบอร์โทร" autocomplete="off" data-ps-q />
+		<span class="ps-count" data-ps-count></span>
+		<button type="button" class="ps-go" data-ps-go>ค้นหา</button>
+	</label>
+	<ol class="ps-results" data-ps-results hidden></ol>
+</section>
+
+<script>
+	const MAX = 60;
+	// Thai digits and spacing/dots are ignored so "สบท" finds "สบท." and "๑๒" finds "12".
+	const fold = (s: string) =>
+		s
+			.toLocaleLowerCase("th")
+			.replace(/[๐-๙]/g, (d) => String("๐๑๒๓๔๕๖๗๘๙".indexOf(d)));
+
+	document.querySelectorAll<HTMLElement>("[data-page-search]").forEach((box) => {
+		const input = box.querySelector<HTMLInputElement>("[data-ps-q]")!;
+		const list = box.querySelector<HTMLOListElement>("[data-ps-results]")!;
+		const count = box.querySelector<HTMLElement>("[data-ps-count]")!;
+		const scope = box.closest("main") ?? document.body;
+		let marks: HTMLElement[] = [];
+
+		const clearMarks = () => {
+			for (const m of marks) {
+				const parent = m.parentNode;
+				if (!parent) continue;
+				parent.replaceChild(document.createTextNode(m.textContent ?? ""), m);
+				parent.normalize();
+			}
+			marks = [];
+		};
+
+		const textNodes = () => {
+			const out: Text[] = [];
+			const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+				acceptNode: (n) => {
+					const el = n.parentElement;
+					if (!el || !n.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
+					if (el.closest("script, style, noscript, template, [data-page-search], svg, select, option, .sr-only"))
+						return NodeFilter.FILTER_REJECT;
+					return NodeFilter.FILTER_ACCEPT;
+				},
+			});
+			while (walker.nextNode()) out.push(walker.currentNode as Text);
+			return out;
+		};
+
+		// Where a match sits: the nearest heading, tab label or row title before it.
+		const clean = (t?: string | null) => (t ?? "").replace(/\s+/g, " ").trim();
+		const contextOf = (el: Element) => {
+			const parts: string[] = [];
+			const panel = el.closest<HTMLElement>("[data-st] .st-panel, [data-about-panel], .acc-panel, [data-year-panel], [data-region-panel]");
+			const banner = clean(panel?.querySelector(".st-banner, .rm-title, h2, h3")?.textContent);
+			if (banner) parts.push(banner);
+			// A chart opened under a table row belongs to that row (e.g. the office name).
+			const detail = el.closest("tr.ot-detail");
+			const rowTitle = detail ? clean(detail.previousElementSibling?.querySelector("strong")?.textContent) : "";
+			if (rowTitle) parts.push(rowTitle);
+			const group = el.closest("details, [data-staff-panel], .group-card, .ra-item, .acc-groupbox");
+			const head = clean(group?.querySelector("summary .acc-group-name, summary, h2, h3, h4, .ra-title")?.textContent);
+			if (head && !parts.includes(head)) parts.push(head);
+			return parts.join(" › ").slice(0, 140);
+		};
+		// The text around a match: its row, card or box, trimmed to the part near the match.
+		const hostOf = (mark: HTMLElement) =>
+			mark.closest("tr, li, p, summary, .rc-line, .org-box, .rc-box, td, dd, h1, h2, h3, h4") ?? mark.parentElement!;
+		const snippetOf = (mark: HTMLElement) => {
+			const host = hostOf(mark);
+			const text = clean(host.textContent);
+			const at = text.indexOf(clean(mark.textContent));
+			if (text.length <= 140 || at < 0) return text.slice(0, 140);
+			const start = Math.max(0, at - 60);
+			return (start > 0 ? "…" : "") + text.slice(start, start + 140) + (start + 140 < text.length ? "…" : "");
+		};
+
+		// Open everything that hides an element: tabs/panels (keeping their switches in sync),
+		// <details>, and collapsed table rows.
+		const reveal = (el: Element) => {
+			const chain: HTMLElement[] = [];
+			for (let n = el.parentElement; n && n !== scope; n = n.parentElement) chain.unshift(n);
+			for (const node of chain) {
+				if (node instanceof HTMLDetailsElement) node.open = true;
+				if (!node.hidden) continue;
+				// Collapsed office chart rows open through their "ดูผัง" button.
+				const toggle = node.id ? scope.querySelector<HTMLButtonElement>(`[data-ot-toggle="${CSS.escape(node.id.replace(/^chart-/, ""))}"]`) : null;
+				if (toggle) {
+					toggle.click();
+					continue;
+				}
+				// A tab panel: its controls carry the panel's id or data value — use them so the tab bar updates.
+				const keys = [node.id, node.id.replace(/^(st|panel)-/, ""), ...Object.values(node.dataset)].filter(Boolean) as string[];
+				const control = [...scope.querySelectorAll<HTMLElement>("button, [role=tab]")].find(
+					(b) =>
+						!b.closest("[data-page-search]") &&
+						(keys.includes(b.getAttribute("aria-controls") ?? "") ||
+							Object.values(b.dataset).some((v) => v && keys.includes(v))),
+				);
+				const select = [...scope.querySelectorAll<HTMLSelectElement>("select")].find((s) =>
+					[...s.options].some((o) => keys.includes(o.value)),
+				);
+				if (select) {
+					select.value = [...select.options].find((o) => keys.includes(o.value))!.value;
+					select.dispatchEvent(new Event("change", { bubbles: true }));
+				} else if (control) {
+					control.click();
+				}
+				if (node.hidden) {
+					// No control found: hide the panel's look-alike siblings and show this one.
+					const cls = node.classList[0];
+					if (cls) node.parentElement?.querySelectorAll<HTMLElement>(`:scope > .${CSS.escape(cls)}`).forEach((s) => (s.hidden = s !== node));
+					node.hidden = false;
+				}
+			}
+		};
+
+		const go = (mark: HTMLElement) => {
+			reveal(mark);
+			marks.forEach((m) => m.classList.remove("is-current"));
+			mark.classList.add("is-current");
+			requestAnimationFrame(() => mark.scrollIntoView({ behavior: "smooth", block: "center" }));
+		};
+
+		const run = () => {
+			clearMarks();
+			list.innerHTML = "";
+			const raw = input.value.trim();
+			const q = fold(raw);
+			if (q.length < 2) {
+				list.hidden = true;
+				count.textContent = "";
+				return;
+			}
+			for (const node of textNodes()) {
+				const text = node.nodeValue!;
+				const folded = fold(text);
+				let at = folded.indexOf(q);
+				if (at < 0) continue;
+				let cur: Text = node;
+				let offset = 0;
+				while (at >= 0) {
+					const start = at - offset;
+					const hit = cur.splitText(start);
+					const rest = hit.splitText(q.length);
+					const mark = document.createElement("mark");
+					mark.className = "ps-mark";
+					hit.parentNode!.replaceChild(mark, hit);
+					mark.appendChild(hit);
+					marks.push(mark);
+					cur = rest;
+					offset = at + q.length;
+					at = folded.indexOf(q, offset);
+				}
+			}
+			count.textContent = marks.length ? `พบ ${marks.length} จุด` : "ไม่พบ";
+			// One row per paragraph/row/card: several hits in the same text show once and jump to the first.
+			const rows: { mark: HTMLElement; hits: number }[] = [];
+			const byHost = new Map<Element, (typeof rows)[number]>();
+			for (const mark of marks) {
+				const host = hostOf(mark);
+				const row = byHost.get(host);
+				if (row) row.hits++;
+				else {
+					const r = { mark, hits: 1 };
+					byHost.set(host, r);
+					rows.push(r);
+				}
+			}
+			for (const { mark, hits } of rows.slice(0, MAX)) {
+				const li = document.createElement("li");
+				const btn = document.createElement("button");
+				btn.type = "button";
+				btn.className = "ps-hit";
+				const ctx = contextOf(mark);
+				if (ctx || hits > 1) {
+					const meta = document.createElement("span");
+					meta.className = "ps-meta";
+					if (ctx) {
+						const tag = document.createElement("span");
+						tag.className = "ps-tag";
+						tag.textContent = ctx;
+						meta.appendChild(tag);
+					}
+					if (hits > 1) {
+						const n = document.createElement("span");
+						n.className = "ps-hits";
+						n.textContent = `${hits} จุด`;
+						meta.appendChild(n);
+					}
+					btn.appendChild(meta);
+				}
+				// The line, with every occurrence of the query highlighted.
+				const line = snippetOf(mark);
+				const text = document.createElement("span");
+				text.className = "ps-line";
+				const folded = fold(line);
+				let last = 0;
+				for (let at = folded.indexOf(q); at >= 0; at = folded.indexOf(q, at + q.length)) {
+					text.append(line.slice(last, at));
+					const m = document.createElement("mark");
+					m.textContent = line.slice(at, at + q.length);
+					text.appendChild(m);
+					last = at + q.length;
+				}
+				text.append(line.slice(last));
+				btn.appendChild(text);
+				btn.addEventListener("click", () => {
+					list.hidden = true;
+					go(mark);
+				});
+				li.appendChild(btn);
+				list.appendChild(li);
+			}
+			if (rows.length > MAX) {
+				const li = document.createElement("li");
+				li.className = "ps-more";
+				li.textContent = `แสดง ${MAX} รายการแรก — พิมพ์คำให้เจาะจงขึ้นเพื่อดูผลที่เหลือ`;
+				list.appendChild(li);
+			}
+			if (!marks.length) {
+				const li = document.createElement("li");
+				li.className = "ps-more";
+				li.textContent = `ไม่พบ "${raw}" ในหน้านี้ — ลองค้นหาทั้งเว็บไซต์ด้วยปุ่มค้นหาด้านบน`;
+				list.appendChild(li);
+			}
+			list.hidden = false;
+		};
+
+		let timer = 0;
+		input.addEventListener("input", () => {
+			clearTimeout(timer);
+			timer = window.setTimeout(run, 200);
+		});
+		// The list floats over the page: close it on an outside click, bring it back on focus.
+		document.addEventListener("click", (e) => {
+			if (!box.contains(e.target as Node)) list.hidden = true;
+		});
+		input.addEventListener("focus", () => {
+			if (list.childElementCount && input.value.trim().length >= 2) list.hidden = false;
+		});
+		box.querySelector("[data-ps-go]")!.addEventListener("click", () => {
+			clearTimeout(timer);
+			run();
+			if (marks[0]) go(marks[0]);
+			else input.focus();
+		});
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" && marks[0]) {
+				e.preventDefault();
+				go(marks[0]);
+			}
+			if (e.key === "Escape") {
+				input.value = "";
+				run();
+			}
+		});
+	});
+</script>
+
+<style>
+	.ps {
+		position: relative;
+		margin-bottom: 22px;
+	}
+
+	.ps-box {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 4px 4px 4px 18px;
+		border: 2px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+		color: var(--color-muted);
+		transition: border-color 0.15s, box-shadow 0.15s;
+	}
+
+	.ps-box:focus-within {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 4px var(--color-primary-soft);
+	}
+
+	.ps-box input {
+		flex: 1;
+		min-width: 0;
+		padding: 8px 0;
+		border: 0;
+		outline: 0;
+		background: none;
+		font: inherit;
+		color: var(--color-text);
+	}
+
+	.ps-count {
+		flex-shrink: 0;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--color-primary);
+	}
+
+	.ps-go {
+		flex-shrink: 0;
+		padding: 8px 22px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--color-primary);
+		color: #fff;
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.ps-go:hover {
+		background: var(--color-primary-dark);
+	}
+
+	/* the result rows are built in the browser, so their styles must be global (scoped under .ps) */
+	.ps-results {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: calc(100% + 8px);
+		z-index: 40;
+		list-style: none;
+		margin: 0;
+		padding: 6px;
+		max-height: min(440px, 60vh);
+		overflow-y: auto;
+		border: 1px solid var(--color-border);
+		border-radius: 16px;
+		background: #fff;
+		box-shadow: 0 16px 40px rgb(10 30 40 / 14%);
+	}
+
+	.ps-results[hidden] {
+		display: none;
+	}
+
+	.ps :global(.ps-hit) {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+		width: 100%;
+		padding: 10px 14px;
+		border: 0;
+		border-radius: 10px;
+		background: none;
+		font: inherit;
+		text-align: left;
+		color: var(--color-text);
+		cursor: pointer;
+	}
+
+	.ps :global(li + li .ps-hit) {
+		border-top: 1px solid var(--color-border);
+		border-radius: 0 0 10px 10px;
+	}
+
+	.ps :global(.ps-hit:hover),
+	.ps :global(.ps-hit:focus-visible) {
+		background: var(--color-primary-soft);
+		outline: 0;
+	}
+
+	.ps :global(.ps-meta) {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.ps :global(.ps-tag) {
+		padding: 1px 10px;
+		border-radius: 6px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary-dark);
+		font-size: 0.74rem;
+		font-weight: 600;
+	}
+
+	.ps :global(.ps-hits) {
+		font-size: 0.76rem;
+		color: var(--color-muted);
+	}
+
+	.ps :global(.ps-line) {
+		font-size: 0.92rem;
+		font-weight: 600;
+		line-height: 1.55;
+		color: var(--color-primary-dark);
+	}
+
+	.ps :global(.ps-line mark) {
+		padding: 0 1px;
+		border-radius: 3px;
+		background: #ffe58a;
+		color: inherit;
+	}
+
+	.ps :global(.ps-more) {
+		padding: 10px 14px;
+		font-size: 0.82rem;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 520px) {
+		.ps-go {
+			padding: 8px 14px;
+		}
+
+		.ps-count {
+			display: none;
+		}
+	}
+
+	:global(mark.ps-mark) {
+		padding: 0 1px;
+		border-radius: 3px;
+		background: #ffe58a;
+		color: inherit;
+	}
+
+	:global(mark.ps-mark.is-current) {
+		background: #ffb020;
+		box-shadow: 0 0 0 3px rgb(255 176 32 / 35%);
+	}
+</style>

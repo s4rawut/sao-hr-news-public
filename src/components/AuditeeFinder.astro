@@ -1,0 +1,564 @@
+---
+import { getEmDashCollection } from "emdash";
+import { mediaUrl } from "../utils/site-info";
+import Icon from "./Icon.astro";
+
+/**
+ * Auditee page: assignment orders (each opens its PDF), then a finder that answers both
+ * "which auditees does this office cover?" and "which office covers this auditee?".
+ * Filtering runs in the browser over the lists from "หน่วยรับตรวจแยกตามสำนัก".
+ */
+const [ordersResult, officesResult] = await Promise.all([
+	getEmDashCollection("audit_orders", { orderBy: { published_at: "desc" }, limit: 200 }),
+	getEmDashCollection("audit_offices", { limit: 200 }),
+]);
+if (Astro.cache?.enabled) {
+	Astro.cache.set(ordersResult.cacheHint);
+	Astro.cache.set(officesResult.cacheHint);
+}
+
+const byOrder = <T extends { data: { sort_order?: number | null } }>(list: T[]) =>
+	[...list].sort((a, b) => (a.data.sort_order ?? Infinity) - (b.data.sort_order ?? Infinity));
+const orders = byOrder(ordersResult.entries);
+const offices = byOrder(officesResult.entries).map((o) => ({
+	entry: o,
+	items: (o.data.auditees ?? "")
+		.split("\n")
+		.map((l) => l.replace(/^\s*[-–•]\s*/, "").trim())
+		.filter(Boolean)
+		// A trailing "*" (pointing to the office's หมายเหตุ) is shown as a red star.
+		.map((l) => ({ text: l.replace(/\s*\*$/, ""), star: /\*$/.test(l) })),
+}));
+
+// PDFs open in the browser's viewer (see /files/pdf) rather than downloading.
+const orderHref = (o: (typeof orders)[number]) => {
+	const key = o.data.file?.meta?.storageKey;
+	if (typeof key === "string" && key.toLowerCase().endsWith(".pdf")) {
+		// Pass the original upload filename so the viewer's Download button saves a readable name.
+		const name = o.data.file?.filename;
+		const query = name ? `?name=${encodeURIComponent(name)}` : "";
+		return `/files/pdf/${encodeURIComponent(key)}${query}`;
+	}
+	return mediaUrl(o.data.file) ?? (o.data.link || undefined);
+};
+
+// In an office's หมายเหตุ, "คำสั่ง ... ที่ 350/2569" links to the order with that number in the คำสั่ง tab.
+const orderByNo = new Map<string, (typeof orders)[number]>();
+for (const o of orders) {
+	const no = o.data.title.match(/ที่\s*([\d๐-๙]+\/[\d๐-๙]{4})/)?.[1];
+	if (no && !orderByNo.has(no)) orderByNo.set(no, o);
+}
+type NotePart = { text: string; href?: string; title?: string };
+const noteParts = (note: string): NotePart[] => {
+	const parts: NotePart[] = [];
+	let last = 0;
+	for (const m of note.matchAll(/คำสั่ง[^\n\d๐-๙]{0,24}?([\d๐-๙]+\/[\d๐-๙]{4})/g)) {
+		const o = orderByNo.get(m[1]);
+		const href = o && orderHref(o);
+		if (!o || !href) continue;
+		if (m.index > last) parts.push({ text: note.slice(last, m.index) });
+		parts.push({ text: m[0], href, title: o.data.title });
+		last = m.index + m[0].length;
+	}
+	if (last < note.length) parts.push({ text: note.slice(last) });
+	return parts;
+};
+
+const initialQuery = Astro.url.searchParams.get("q") ?? "";
+const initialOffice = Astro.url.searchParams.get("office") ?? "";
+// The finder tab comes first and is open by default (when there are offices); #orders opens คำสั่ง.
+const openFinder = offices.length > 0;
+---
+
+<section class="af" data-af>
+	<div class="af-tabs" role="tablist" aria-label="หน่วยรับตรวจ">
+		{offices.length > 0 && (
+			<button type="button" role="tab" id="af-tab-finder" aria-controls="finder" aria-selected={openFinder ? "true" : "false"} class:list={{ "is-active": openFinder }} data-af-tab="finder">
+				ค้นหาหน่วยรับตรวจ
+			</button>
+		)}
+		<button type="button" role="tab" id="af-tab-orders" aria-controls="orders" aria-selected={openFinder ? "false" : "true"} class:list={{ "is-active": !openFinder }} data-af-tab="orders">
+			คำสั่ง
+		</button>
+	</div>
+
+	<div class="af-panel" id="orders" role="tabpanel" aria-labelledby="af-tab-orders" hidden={openFinder}>
+		<h2 class="af-banner">หน่วยรับตรวจในความรับผิดชอบ</h2>
+		{
+			orders.length === 0 ? (
+				<p class="af-empty">ยังไม่มีคำสั่ง</p>
+			) : (
+				<ul class="af-orders">
+					{orders.map((o) => {
+						const href = orderHref(o);
+						return (
+							<li>
+								{href ? (
+									<a href={href} target="_blank" rel="noopener noreferrer">
+										<span class="af-pdf">PDF</span>
+										<span {...o.edit.title}>{o.data.title}</span>
+									</a>
+								) : (
+									<span class="af-nofile">
+										<span {...o.edit.title}>{o.data.title}</span>
+										<small>ยังไม่ได้แนบไฟล์</small>
+									</span>
+								)}
+							</li>
+						);
+					})}
+				</ul>
+			)
+		}
+	</div>
+
+	{
+		offices.length > 0 && (
+			<div class="af-panel af-finder" id="finder" role="tabpanel" aria-labelledby="af-tab-finder" data-finder hidden={!openFinder}>
+				<div class="af-controls">
+					<label class="af-search">
+						<Icon name="search" size={20} />
+						<span class="sr-only">ชื่อหน่วยรับตรวจหรือชื่อสำนัก</span>
+						<input
+							type="search"
+							placeholder="พิมพ์ชื่อหน่วยรับตรวจ เช่น กรมประชาสัมพันธ์ หรือชื่อสำนัก"
+							value={initialQuery}
+							data-finder-q
+							autocomplete="off"
+						/>
+					</label>
+					<label class="af-select">
+						<span class="sr-only">เลือกสำนัก</span>
+						<select data-finder-office>
+							<option value="">ทุกสำนัก</option>
+							{offices.map(({ entry }) => (
+								<option value={entry.id} selected={entry.id === initialOffice}>
+									{entry.data.title}
+								</option>
+							))}
+						</select>
+					</label>
+				</div>
+				<p class="af-summary" data-finder-summary aria-live="polite" />
+
+				{offices.map(({ entry, items }) => (
+					<article class="af-office" data-office={entry.id} data-office-text={`${entry.data.title} ${entry.data.subtitle ?? ""}`}>
+						<header class="af-office-head">
+							<h3 {...entry.edit.title}>{entry.data.title}</h3>
+							{entry.data.subtitle && <p>{entry.data.subtitle}</p>}
+						</header>
+						<div class="af-office-sub">
+							หน่วยรับตรวจที่รับผิดชอบ <span data-office-count>{items.length}</span>
+						</div>
+						<ul class="af-items">
+							{items.map((item) => (
+								<li data-item>
+									<span data-item-text>{item.text}</span>
+									{item.star && <span class="af-star" aria-label="มีหมายเหตุ">*</span>}
+								</li>
+							))}
+						</ul>
+						{entry.data.note && (
+							<p class="af-note">
+								<span class="af-star" aria-hidden="true">*</span>{" "}
+								{noteParts(entry.data.note).map((part) =>
+									part.href ? (
+										<a href={part.href} title={part.title} target="_blank" rel="noopener noreferrer">
+											{part.text}
+										</a>
+									) : (
+										part.text
+									),
+								)}
+							</p>
+						)}
+					</article>
+				))}
+				<p class="af-empty" data-finder-empty hidden>
+					ไม่พบหน่วยรับตรวจที่ตรงกับคำค้น
+				</p>
+			</div>
+		)
+	}
+</section>
+
+<script>
+	// Thai has no word spaces and documents mix Thai/Arabic digits, so match on a squashed form.
+	const thaiDigits = "๐๑๒๓๔๕๖๗๘๙";
+	const squash = (s: string) =>
+		s
+			.toLocaleLowerCase("th")
+			.replace(/[๐-๙]/g, (d) => String(thaiDigits.indexOf(d)))
+			.replace(/[\s.]+/g, "");
+	const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+	// Wrap the matched part in <mark>, mapping positions back from the squashed text.
+	const highlight = (text: string, q: string) => {
+		if (!q) return escapeHtml(text);
+		const map: number[] = [];
+		let flat = "";
+		[...text].forEach((ch, i) => {
+			const s = squash(ch);
+			for (const c of s) {
+				flat += c;
+				map.push(i);
+			}
+		});
+		const at = flat.indexOf(q);
+		if (at < 0) return escapeHtml(text);
+		const chars = [...text];
+		const start = map[at];
+		const end = map[at + q.length - 1] + 1;
+		return `${escapeHtml(chars.slice(0, start).join(""))}<mark>${escapeHtml(chars.slice(start, end).join(""))}</mark>${escapeHtml(chars.slice(end).join(""))}`;
+	};
+
+	// Tabs: ค้นหาหน่วยรับตรวจ / คำสั่ง
+	document.querySelectorAll<HTMLElement>("[data-af]").forEach((root) => {
+		const tabs = [...root.querySelectorAll<HTMLButtonElement>("[data-af-tab]")];
+		const show = (id: string) => {
+			for (const t of tabs) {
+				const active = t.dataset.afTab === id;
+				t.classList.toggle("is-active", active);
+				t.setAttribute("aria-selected", String(active));
+				root.querySelector<HTMLElement>(`#${t.dataset.afTab}`)!.hidden = !active;
+			}
+		};
+		tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.afTab!)));
+		if (location.hash === "#finder" || location.hash === "#orders") show(location.hash.slice(1));
+	});
+
+	document.querySelectorAll<HTMLElement>("[data-finder]").forEach((root) => {
+		const input = root.querySelector<HTMLInputElement>("[data-finder-q]")!;
+		const select = root.querySelector<HTMLSelectElement>("[data-finder-office]")!;
+		const summary = root.querySelector<HTMLElement>("[data-finder-summary]")!;
+		const empty = root.querySelector<HTMLElement>("[data-finder-empty]")!;
+		const offices = [...root.querySelectorAll<HTMLElement>("[data-office]")];
+		offices.forEach((o) => o.querySelectorAll<HTMLElement>("[data-item]").forEach((li) => (li.dataset.text = li.querySelector("[data-item-text]")?.textContent ?? "")));
+
+		const apply = () => {
+			const q = squash(input.value);
+			const only = select.value;
+			let officeCount = 0;
+			let itemCount = 0;
+			for (const o of offices) {
+				const items = [...o.querySelectorAll<HTMLElement>("[data-item]")];
+				const officeMatch = !q || squash(o.dataset.officeText ?? "").includes(q);
+				let shown = 0;
+				for (const li of items) {
+					const text = li.dataset.text ?? "";
+					const hit = officeMatch || squash(text).includes(q);
+					li.hidden = !hit;
+					li.querySelector("[data-item-text]")!.innerHTML = officeMatch ? escapeHtml(text) : highlight(text, q);
+					if (hit) shown++;
+				}
+				const visible = (!only || o.dataset.office === only) && shown > 0;
+				o.hidden = !visible;
+				o.querySelector<HTMLElement>("[data-office-count]")!.textContent = q && !officeMatch ? `${shown} จาก ${items.length}` : String(items.length);
+				if (visible) {
+					officeCount++;
+					itemCount += shown;
+				}
+			}
+			empty.hidden = officeCount > 0;
+			summary.textContent = q
+				? officeCount > 0
+					? `พบ ${itemCount} หน่วยรับตรวจ ใน ${officeCount} สำนัก`
+					: ""
+				: only
+					? ""
+					: `ทั้งหมด ${offices.length} สำนัก`;
+			const url = new URL(location.href);
+			input.value ? url.searchParams.set("q", input.value) : url.searchParams.delete("q");
+			only ? url.searchParams.set("office", only) : url.searchParams.delete("office");
+			history.replaceState(null, "", url);
+		};
+		input.addEventListener("input", apply);
+		select.addEventListener("change", apply);
+		apply();
+	});
+</script>
+
+<style>
+	.af {
+		margin-top: 8px;
+	}
+
+	.af-tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		width: fit-content;
+		max-width: 100%;
+		margin-bottom: 22px;
+		padding: 6px;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+	}
+
+	.af-tabs button {
+		padding: 10px 26px;
+		border: 0;
+		border-radius: 999px;
+		background: transparent;
+		font: inherit;
+		font-weight: 600;
+		color: var(--color-primary);
+		cursor: pointer;
+		transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+	}
+
+	.af-tabs button:hover {
+		background: rgb(255 255 255 / 75%);
+	}
+
+	.af-tabs button.is-active {
+		background: var(--color-primary);
+		color: #fff;
+		box-shadow: 0 4px 12px rgb(15 111 135 / 25%);
+	}
+
+	.af-panel {
+		scroll-margin-top: 130px;
+	}
+
+	.af-banner {
+		margin: 0 0 8px;
+		padding: 20px 26px;
+		border-radius: 16px;
+		background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+		color: #fff;
+		font-size: clamp(1.1rem, 2.4vw, 1.45rem);
+		font-weight: 600;
+	}
+
+	.af-orders {
+		list-style: none;
+		margin: 0 0 36px;
+		padding: 0;
+	}
+
+	.af-orders li {
+		margin: 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.af-orders a,
+	.af-nofile {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 18px 4px;
+		color: var(--color-text);
+		text-decoration: none;
+		line-height: 1.6;
+		transition: color 0.15s, background 0.15s;
+	}
+
+	.af-orders a:hover {
+		color: var(--color-primary);
+		background: var(--color-primary-soft);
+	}
+
+	.af-pdf {
+		flex-shrink: 0;
+		margin-top: 3px;
+		padding: 2px 8px;
+		border-radius: 6px;
+		background: #d6453d;
+		color: #fff;
+		font-size: 0.7rem;
+		font-weight: 700;
+	}
+
+	.af-nofile {
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.af-nofile small {
+		color: var(--color-muted);
+	}
+
+	.af-controls {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px;
+		margin: 0 0 8px;
+	}
+
+	.af-search {
+		flex: 1 1 320px;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 0 16px;
+		border: 2px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+		color: var(--color-muted);
+		transition: border-color 0.15s;
+	}
+
+	.af-search:focus-within {
+		border-color: var(--color-primary);
+	}
+
+	.af-search input {
+		flex: 1;
+		min-width: 0;
+		padding: 12px 0;
+		border: 0;
+		outline: none;
+		background: transparent;
+		font: inherit;
+		color: var(--color-text);
+	}
+
+	.af-select select {
+		height: 100%;
+		min-height: 48px;
+		padding: 0 16px;
+		border: 2px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+		font: inherit;
+		color: var(--color-text);
+	}
+
+	.af-summary {
+		margin: 0 0 16px;
+		min-height: 1.4em;
+		font-size: 0.9rem;
+		color: var(--color-muted);
+	}
+
+	.af-office {
+		margin-bottom: 24px;
+		border: 2px solid var(--color-primary-dark);
+		border-radius: 12px;
+		overflow: hidden;
+		background: #fff;
+	}
+
+	.af-office[hidden] {
+		display: none;
+	}
+
+	.af-office-head {
+		padding: 18px 20px;
+		text-align: center;
+		border-bottom: 2px solid var(--color-primary-dark);
+		background: var(--color-primary-soft);
+	}
+
+	.af-office-head h3 {
+		margin: 0;
+		font-size: clamp(1.2rem, 2.6vw, 1.6rem);
+		color: var(--color-primary-dark);
+	}
+
+	.af-office-head p {
+		margin: 4px 0 0;
+		font-weight: 700;
+		color: var(--color-text);
+	}
+
+	.af-office-sub {
+		padding: 10px 20px;
+		text-align: center;
+		font-weight: 700;
+		border-bottom: 2px solid var(--color-primary-dark);
+	}
+
+	.af-office-sub span {
+		margin-left: 6px;
+		padding: 1px 10px;
+		border-radius: 999px;
+		background: var(--color-primary);
+		color: #fff;
+		font-size: 0.8rem;
+	}
+
+	.af-items {
+		margin: 0;
+		padding: 18px 22px 22px;
+		list-style: none;
+		columns: 2;
+		column-gap: 36px;
+	}
+
+	.af-items li {
+		position: relative;
+		margin: 0 0 6px;
+		padding-left: 14px;
+		break-inside: avoid;
+		line-height: 1.6;
+	}
+
+	.af-items li::before {
+		content: "-";
+		position: absolute;
+		left: 0;
+	}
+
+	.af-star {
+		margin-left: 4px;
+		color: #d42020;
+		font-weight: 700;
+	}
+
+	.af-note {
+		margin: -8px 22px 18px;
+		padding: 10px 14px;
+		border-radius: 10px;
+		background: #fff4f4;
+		color: #8a1c1c;
+		font-size: 0.92rem;
+		line-height: 1.6;
+	}
+
+	.af-note a {
+		color: #b01818;
+		font-weight: 700;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.af-note a:hover {
+		color: #7a0f0f;
+	}
+
+	.af-note .af-star {
+		margin: 0 4px 0 0;
+	}
+
+	.af-items li[hidden] {
+		display: none;
+	}
+
+	.af-items :global(mark) {
+		padding: 0 2px;
+		border-radius: 3px;
+		background: #fde68a;
+		color: inherit;
+	}
+
+	.af-empty {
+		padding: 24px;
+		text-align: center;
+		color: var(--color-muted);
+		border: 1px dashed var(--color-border);
+		border-radius: var(--radius);
+	}
+
+	@media (max-width: 760px) {
+		.af-items {
+			columns: 1;
+		}
+
+		.af-select,
+		.af-select select {
+			width: 100%;
+		}
+	}
+</style>

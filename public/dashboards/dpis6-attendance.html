@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="th" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สถิติการลงเวลาปฏิบัติราชการ ผ่านระบบ DPIS6</title>
+    <base target="_blank">
+
+    <script src="/vendor/dashboard/tailwindcss-play.js"></script>
+    <script src="/vendor/dashboard/chart.umd.min.js"></script>
+    <script src="/vendor/dashboard/chartjs-plugin-datalabels.min.js"></script>
+    <script src="/vendor/dashboard/papaparse.min.js"></script>
+    <script src="/vendor/dashboard/lucide.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Prompt', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#eff6ff', 100: '#dbeafe', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 900: '#1e3a8a' }
+                    },
+                    boxShadow: { 'glass': '0 10px 40px -10px rgba(0,0,0,0.08)' }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        @import url('/fonts/prompt.css');
+
+        body {
+            background-color: #f8fafc;
+            background-image:
+                radial-gradient(at 0% 0%, hsla(228, 100%, 74%, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(260, 80%, 70%, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, hsla(190, 100%, 70%, 0.1) 0px, transparent 50%);
+            color: #334155;
+            overflow-x: hidden;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08);
+            border-color: rgba(255, 255, 255, 1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col w-full">
+
+    <nav class="sticky top-0 z-40 w-full backdrop-blur-xl bg-white/70 border-b border-white/50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16 lg:h-20">
+            <div class="flex items-center gap-3 md:gap-4">
+                <div class="bg-gradient-to-br from-brand-400 to-indigo-600 text-white p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-lg shadow-brand-500/30">
+                    <i data-lucide="pie-chart" class="h-6 w-6 md:h-7 md:w-7"></i>
+                </div>
+                <span class="font-bold text-xl md:text-2xl text-slate-800 hidden sm:block tracking-tight">SAO HR <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-indigo-600">Analytics</span></span>
+            </div>
+            <span id="navDateDisplay" class="text-sm md:text-base font-semibold bg-white/80 text-slate-600 px-4 md:px-5 py-2 md:py-2.5 rounded-full border border-slate-200 shadow-sm flex items-center gap-2 transition-all">
+                <i data-lucide="loader-2" class="h-4 w-4 md:h-5 md:w-5 animate-spin text-brand-500"></i> เตรียมระบบ...
+            </span>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
+
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-8 md:mb-10 gap-5 md:gap-6">
+            <div class="max-w-3xl">
+                <h1 class="text-3xl md:text-4xl lg:text-5xl font-extrabold text-slate-900 leading-tight tracking-tight">สถิติการลงเวลาปฏิบัติราชการ ผ่านระบบ DPIS6</h1>
+                <p id="mainSubtitle" class="text-slate-500 text-base md:text-lg lg:text-xl mt-3 font-medium">ระบบวิเคราะห์ข้อมูลสถานที่ปฏิบัติงานและการลงเวลา</p>
+                <div class="mt-4 md:mt-5 inline-flex items-center bg-white text-indigo-700 text-base md:text-lg font-semibold px-4 md:px-5 py-2 md:py-2.5 rounded-xl border border-indigo-100 shadow-sm">
+                    <i data-lucide="users" class="h-5 w-5 mr-2 text-indigo-500"></i> บุคลากรทั้งหมด <span id="totalPopHeader" class="font-bold ml-1 mx-1 text-indigo-600 text-lg md:text-xl">...</span> คน
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 bg-white/60 p-3 rounded-2xl md:rounded-3xl shadow-sm border border-white/80 backdrop-blur-md">
+                <div class="relative bg-white px-4 md:px-5 py-2.5 md:py-3 rounded-xl flex items-center min-w-[180px] shadow-sm hover:border-brand-300 transition-colors border border-slate-200">
+                    <i data-lucide="calendar" class="h-5 w-5 md:h-6 md:w-6 text-brand-500 mr-3 md:mr-4"></i>
+                    <div class="flex-grow">
+                        <label class="block text-[11px] md:text-xs uppercase font-bold text-slate-400 tracking-wider">เลือกวันที่</label>
+                        <div class="relative">
+                            <input type="date" id="dateSelect" min="2026-01-01" class="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer">
+                            <div class="text-base md:text-lg font-bold text-slate-800 flex justify-between items-center w-full mt-0.5">
+                                <span id="dateSelectDisplay">-</span> <i data-lucide="chevron-down" class="w-4 h-4 md:w-5 md:h-5 text-slate-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="openReportModal()" class="flex items-center gap-2 bg-gradient-to-r from-slate-800 to-slate-900 text-white text-sm md:text-base font-semibold py-3 md:py-4 px-4 md:px-5 rounded-xl shadow-lg shadow-slate-900/20 hover:shadow-slate-900/40 hover:-translate-y-0.5 transition-all">
+                    <i data-lucide="sparkles" class="w-4 h-4 md:w-5 md:h-5 text-amber-300"></i>
+                    <span class="hidden sm:inline">AI Summary</span>
+                </button>
+                <button onclick="exportDailyData()" class="flex items-center gap-2 bg-white text-slate-700 text-sm md:text-base font-semibold py-3 md:py-4 px-4 md:px-5 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-50 hover:text-brand-600 hover:border-brand-200 hover:-translate-y-0.5 transition-all">
+                    <i data-lucide="download" class="w-4 h-4 md:w-5 md:h-5 text-brand-500"></i>
+                    <span class="hidden sm:inline">ส่งออกข้อมูล</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="alertBox" class="hidden mb-6 p-4 md:p-5 rounded-2xl shadow-sm border flex items-start gap-3 backdrop-blur-md">
+            <div id="alertIconContainer" class="mt-0.5 md:mt-1"><i id="alertIcon" class="h-5 w-5 md:h-6 md:w-6"></i></div>
+            <div>
+                <h4 id="alertTitle" class="text-base md:text-lg font-bold mb-0.5">แจ้งเตือน</h4>
+                <p id="alertMsg" class="text-sm md:text-base"></p>
+            </div>
+        </div>
+
+        <div id="emptyState" class="hidden flex-col items-center justify-center py-24 glass-card rounded-3xl mb-8">
+            <div class="bg-slate-100 p-5 rounded-full mb-4">
+                <i data-lucide="folder-search" class="h-12 w-12 text-slate-400"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-700">ไม่พบข้อมูล</h2>
+            <p class="text-slate-500 text-base mt-2 text-center px-4" id="emptyStateText">-</p>
+        </div>
+
+        <div id="dashboardContent" class="space-y-6 md:space-y-8 block transition-opacity duration-500">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                <!-- Card 1 -->
+                <div class="glass-card rounded-3xl p-6 relative overflow-hidden group">
+                    <div class="absolute -right-4 -top-4 w-24 h-24 bg-brand-50 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500 ease-out"></div>
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm md:text-base font-bold text-slate-500 uppercase tracking-wide">ลงเวลาแล้ว</h3>
+                            <div class="p-2 md:p-2.5 bg-brand-100 text-brand-600 rounded-lg"><i data-lucide="check-square" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="flex items-end gap-2 mb-4">
+                            <span id="metricTotal" class="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">0</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-2 md:h-2.5 mb-2 overflow-hidden">
+                            <div id="pbTotal" class="bg-gradient-to-r from-brand-400 to-brand-600 h-full rounded-full transition-all duration-1000 ease-out" style="width:0%"></div>
+                        </div>
+                        <div class="text-sm md:text-base font-bold text-brand-600 text-right" id="metricTotalPct">0%</div>
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="glass-card rounded-3xl p-6 relative overflow-hidden group">
+                    <div class="absolute -right-4 -top-4 w-24 h-24 bg-indigo-50 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500 ease-out"></div>
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm md:text-base font-bold text-slate-500 uppercase tracking-wide">สำนักงาน</h3>
+                            <div class="p-2 md:p-2.5 bg-indigo-100 text-indigo-600 rounded-lg"><i data-lucide="building-2" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="flex flex-col">
+                            <span id="metricOffice" class="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">0</span>
+                            <div class="flex items-center gap-2 mt-2 md:mt-3">
+                                <span class="flex h-2.5 w-2.5 rounded-full bg-indigo-500"></span>
+                                <span class="text-sm md:text-base font-bold text-indigo-600" id="metricOfficePct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="glass-card rounded-3xl p-6 relative overflow-hidden group">
+                    <div class="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500 ease-out"></div>
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm md:text-base font-bold text-slate-500 uppercase tracking-wide">WFH</h3>
+                            <div class="p-2 md:p-2.5 bg-emerald-100 text-emerald-600 rounded-lg"><i data-lucide="home" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="flex flex-col">
+                            <span id="metricWfh" class="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">0</span>
+                            <div class="flex items-center gap-2 mt-2 md:mt-3">
+                                <span class="flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                                <span class="text-sm md:text-base font-bold text-emerald-600" id="metricWfhPct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 4 -->
+                <div class="glass-card rounded-3xl p-6 relative overflow-hidden group">
+                    <div class="absolute -right-4 -top-4 w-24 h-24 bg-amber-50 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500 ease-out"></div>
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm md:text-base font-bold text-slate-500 uppercase tracking-wide">ลงพื้นที่/อื่นๆ</h3>
+                            <div class="p-2 md:p-2.5 bg-amber-100 text-amber-600 rounded-lg"><i data-lucide="map-pin" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="flex flex-col">
+                            <span id="metricOthers" class="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">0</span>
+                            <div class="flex items-center gap-2 mt-2 md:mt-3">
+                                <span class="flex h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                                <span class="text-sm md:text-base font-bold text-amber-600" id="metricOthersPct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+                <div class="glass-card rounded-3xl p-6 md:p-8 lg:col-span-2">
+                    <div class="flex items-center gap-3 mb-6 md:mb-8">
+                        <div class="h-7 w-1.5 bg-brand-500 rounded-full"></div>
+                        <h2 class="text-xl md:text-2xl font-bold text-slate-800">รูปแบบการปฏิบัติงาน</h2>
+                    </div>
+                    <div class="h-[300px] md:h-[350px] w-full flex items-center justify-center text-slate-400" id="modalityChartContainer">
+                        <canvas id="modalityChart"></canvas>
+                    </div>
+                </div>
+                <div class="glass-card rounded-3xl p-6 md:p-8">
+                    <div class="flex items-center gap-3 mb-6 md:mb-8">
+                        <div class="h-7 w-1.5 bg-purple-500 rounded-full"></div>
+                        <h2 class="text-xl md:text-2xl font-bold text-slate-800">สัดส่วนตามส่วน</h2>
+                    </div>
+                    <div class="h-[300px] md:h-[350px] w-full flex items-center justify-center text-slate-400" id="affiliationChartContainer">
+                        <canvas id="affiliationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+                <div class="glass-card rounded-3xl p-6 md:p-8">
+                    <div class="flex items-center gap-3 mb-6 md:mb-8">
+                        <div class="h-7 w-1.5 bg-indigo-500 rounded-full"></div>
+                        <h2 class="text-xl md:text-2xl font-bold text-slate-800">เปรียบเทียบตามส่วน</h2>
+                    </div>
+                    <div class="h-[300px] md:h-[350px] w-full flex items-center justify-center text-slate-400" id="crossChartContainer">
+                        <canvas id="crossChart"></canvas>
+                    </div>
+                </div>
+                <div class="glass-card rounded-3xl p-6 md:p-8">
+                    <div class="flex items-center gap-3 mb-6 md:mb-8">
+                        <div class="h-7 w-1.5 bg-amber-500 rounded-full"></div>
+                        <h2 class="text-xl md:text-2xl font-bold text-slate-800">กลุ่ม "อื่นๆ" เจาะลึก</h2>
+                    </div>
+                    <div class="h-[300px] md:h-[350px] w-full flex items-center justify-center text-slate-400" id="othersChartContainer">
+                        <canvas id="othersChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl overflow-hidden shadow-sm">
+                <div class="p-6 md:p-7 border-b border-white/50 bg-white/40 flex items-center gap-3">
+                    <div class="h-7 w-1.5 bg-slate-700 rounded-full"></div>
+                    <h2 class="text-xl md:text-2xl font-bold text-slate-800">สรุปข้อมูลแยกสำนัก</h2>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar bg-white/30 p-4 md:p-6">
+                    <div class="min-w-[850px] flex flex-col border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+
+                        <!-- Table Header (Responsive Font Sizes) -->
+                        <div class="flex bg-slate-100 border-b border-slate-200 text-sm md:text-base text-slate-600 uppercase font-bold sticky top-0 z-10">
+                            <div class="w-20 shrink-0 p-4 md:p-5 text-center border-r border-slate-200">ลำดับ</div>
+                            <div class="flex-1 min-w-[250px] p-4 md:p-5 text-left border-r border-slate-200">รายชื่อสังกัด / สำนัก</div>
+                            <div class="w-28 shrink-0 p-4 md:p-5 text-center border-r border-slate-200">รวมทั้งหมด</div>
+                            <div class="w-28 shrink-0 p-4 md:p-5 text-center text-indigo-600 border-r border-slate-200">สำนักงาน</div>
+                            <div class="w-28 shrink-0 p-4 md:p-5 text-center text-emerald-600 border-r border-slate-200">WFH</div>
+                            <div class="w-28 shrink-0 p-4 md:p-5 text-center text-amber-600">อื่นๆ</div>
+                        </div>
+
+                        <div id="summaryTableBody" class="flex flex-col divide-y divide-slate-100">
+                            <div class="p-10 text-center text-slate-400 text-base md:text-lg">รอข้อมูล...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="reportModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity">
+            <div class="bg-white rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl border border-slate-100">
+                <div class="bg-gradient-to-r from-slate-900 to-slate-800 px-6 md:px-8 py-5 md:py-6 flex justify-between items-center">
+                    <h3 class="text-white font-bold flex items-center text-lg md:text-xl"><i data-lucide="sparkles" class="w-6 h-6 mr-3 text-amber-300"></i> AI Summary (สรุปภาพรวม)</h3>
+                    <button onclick="closeModals()" class="text-slate-400 hover:text-white transition-colors bg-white/10 hover:bg-white/20 rounded-full p-2"><i data-lucide="x" class="w-6 h-6"></i></button>
+                </div>
+                <div class="p-6 md:p-8">
+                    <!-- Textarea ปรับให้อ่านง่ายขึ้น -->
+                    <textarea id="reportTextarea" class="w-full h-80 p-5 md:p-6 border border-slate-200 rounded-2xl bg-slate-50 text-base md:text-lg text-slate-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all shadow-inner"></textarea>
+                </div>
+                <div class="px-6 md:px-8 py-5 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+                    <button onclick="closeModals()" class="px-6 md:px-8 py-3 text-base font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-sm">ปิดหน้าต่าง</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Utilities & Safety Wrapper
+        const safeStr = (val) => (val === null || val === undefined) ? '' : String(val).trim();
+
+        lucide.createIcons();
+        if(typeof Chart !== 'undefined') {
+            Chart.register(ChartDataLabels);
+            Chart.defaults.font.family = "'Prompt', sans-serif";
+            Chart.defaults.font.size = 14; // ขยายฟอนต์ในกราฟ
+            Chart.defaults.color = '#64748b';
+        }
+
+        const cColors = {
+            off: '#4f46e5', wfh: '#10b981', oth: '#f59e0b', emp: '#f1f5f9',
+            pal: ['#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#0ea5e9']
+        };
+        let charts = {};
+
+        const POP_ID = '1p5PBJkoS87avhSdVg7TBz7XloV7TNxz2qV1dgfg3Zlc', MASTER_ID = '1xPzfQjpm3_HxKI5w0majvrwGWfRFvwVpnoArSWLSMuQ';
+        let state = { totalPop: 4012, popMap: {}, sheetMap: {}, currentStats: null };
+
+        const formatThai = d => d ? `${parseInt(d.split('-')[2])} ${["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][parseInt(d.split('-')[1])-1]} ${parseInt(d.split('-')[0])+543}` : '';
+        const getTab = d => `${d.split('-')[2]}${d.split('-')[1]}${String(parseInt(d.split('-')[0])+543).slice(-2)}`;
+
+        async function fetchGSheet(id, tab = '', hasHeader = true) {
+            if (!id) return null;
+            try {
+                const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv${tab?'&sheet='+tab:''}`);
+                if (!res.ok) return null;
+                const text = await res.text();
+                if (text.match(/<html/i) || text.match(/<!doctype/i)) return null;
+
+                return new Promise(resolve => {
+                    Papa.parse(text, {
+                        header: hasHeader,
+                        skipEmptyLines: true,
+                        complete: r => resolve(r.data),
+                        error: () => resolve(null)
+                    });
+                });
+            } catch { return null; }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const maxD = new Date().toISOString().split('T')[0];
+                let dateEl = document.getElementById('dateSelect');
+                if(dateEl) { dateEl.max = maxD; dateEl.value = maxD; }
+
+                document.getElementById('dateSelectDisplay').innerText = formatThai(maxD);
+                document.getElementById('dateSelect').addEventListener('change', e => {
+                    if(e.target.value) {
+                        document.getElementById('dateSelectDisplay').innerText = formatThai(e.target.value);
+                        loadDaily(e.target.value);
+                    }
+                });
+
+                const [popRes, confRes] = await Promise.all([fetchGSheet(POP_ID, '', false), fetchGSheet(MASTER_ID, '', false)]);
+
+                if(popRes) {
+                    popRes.forEach(r => {
+                        if(r && r.length >= 3 && r[0] != null && r[1] != null) {
+                            let yr = parseInt(r[1]);
+                            let key = `${yr > 2500 ? yr-543 : yr}-${String(r[0]).padStart(2,'0')}`;
+                            state.popMap[key] = parseInt(String(r[2]).replace(/\D/g,'')) || 4012;
+                        }
+                    });
+                }
+
+                if(confRes) {
+                    confRes.forEach(r => {
+                        if(r && r.length >= 3 && r[0] != null && r[1] != null && r[2] != null) {
+                            let yr = parseInt(r[1]);
+                            let key = `${yr > 2500 ? yr-543 : yr}-${String(r[0]).padStart(2,'0')}`;
+                            let idMatch = String(r[2]).match(/\/d\/([a-zA-Z0-9-_]+)/);
+                            state.sheetMap[key] = idMatch ? idMatch[1] : String(r[2]);
+                        }
+                    });
+                }
+
+                loadDaily(maxD);
+            } catch (err) {
+                console.error("Initialization Error:", err);
+                msg('err', 'เกิดข้อผิดพลาดในการโหลดระบบเบื้องต้น');
+            }
+        });
+
+        function msg(type, txt) {
+            const ab = document.getElementById('alertBox'), ai = document.getElementById('alertIcon'), aic = document.getElementById('alertIconContainer');
+            if(!ab || !ai || !aic) return;
+
+            ab.classList.remove('hidden');
+            document.getElementById('alertMsg').innerText = txt;
+
+            if(type==='err') {
+                ab.className='mb-6 p-4 md:p-5 rounded-2xl border border-rose-200 bg-rose-50 text-rose-800 flex items-start gap-3 backdrop-blur-md shadow-sm';
+                aic.className='mt-0.5 md:mt-1 text-rose-600'; ai.setAttribute('data-lucide', 'alert-circle');
+                document.getElementById('alertTitle').innerText='ไม่พบข้อมูล / ผิดพลาด';
+            } else {
+                ab.className='mb-6 p-4 md:p-5 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-800 flex items-start gap-3 backdrop-blur-md shadow-sm';
+                aic.className='mt-0.5 md:mt-1 text-emerald-600'; ai.setAttribute('data-lucide', 'check-circle-2');
+                document.getElementById('alertTitle').innerText='สำเร็จ';
+                setTimeout(()=>ab.classList.add('hidden'), 3500);
+            }
+            lucide.createIcons();
+        }
+
+        async function loadDaily(dStr) {
+            try {
+                document.getElementById('navDateDisplay').innerHTML = `<i data-lucide="loader-2" class="h-4 w-4 md:h-5 md:w-5 mr-1.5 animate-spin text-brand-500"></i> กำลังโหลด...`;
+                document.getElementById('dashboardContent').classList.replace('hidden', 'block');
+                document.getElementById('emptyState').classList.replace('flex', 'hidden');
+                lucide.createIcons();
+
+                let keyPrefix = dStr.substring(0,7);
+                state.totalPop = state.popMap[keyPrefix] || 4012;
+                document.getElementById('totalPopHeader').innerText = state.totalPop.toLocaleString();
+
+                const sheetId = state.sheetMap[keyPrefix];
+                if(!sheetId) {
+                    msg('err', 'ยังไม่ได้ตั้งค่า Sheet ID ประจำเดือนนี้');
+                    showEmptyState('ผู้ดูแลระบบยังไม่ได้กำหนดฐานข้อมูลสำหรับเดือนนี้', 'alert-circle', 'text-rose-500', 'ข้อมูลไม่พร้อม');
+                    return;
+                }
+
+                const rawData = await fetchGSheet(sheetId, getTab(dStr), true);
+
+                if(!rawData || rawData.length === 0) {
+                    msg('err', 'ไม่พบข้อมูลการลงเวลาสำหรับวันที่เลือก');
+                    showEmptyState('ไม่มีข้อมูลในระบบ หรือเป็นวันหยุดราชการ', 'calendar-x', 'text-rose-500', 'ไม่มีข้อมูล');
+                    return;
+                }
+
+                msg('ok', `ประมวลผลสำเร็จ ${rawData.length} รายการ`);
+                document.getElementById('navDateDisplay').innerHTML = `<i data-lucide="check-circle-2" class="h-4 w-4 md:h-5 md:w-5 mr-1.5 text-emerald-500"></i> ข้อมูลวันที่ ${formatThai(dStr)}`;
+                lucide.createIcons();
+
+                processStats(rawData);
+            } catch (err) {
+                console.error("Daily Load Error:", err);
+                msg('err', 'โครงสร้างข้อมูลผิดพลาด ไม่สามารถประมวลผลได้');
+                showEmptyState('รูปแบบข้อมูลใน Google Sheets อาจมีการเปลี่ยนแปลง', 'alert-triangle', 'text-amber-500', 'ข้อผิดพลาดระบบ');
+            }
+        }
+
+        function showEmptyState(text, iconName, iconColor, navText) {
+            document.getElementById('dashboardContent').classList.replace('block', 'hidden');
+            document.getElementById('emptyState').classList.replace('hidden', 'flex');
+            document.getElementById('emptyStateText').innerText = text;
+            document.getElementById('navDateDisplay').innerHTML = `<i data-lucide="${iconName}" class="h-4 w-4 md:h-5 md:w-5 mr-1.5 ${iconColor}"></i> ${navText}`;
+            lucide.createIcons();
+            state.currentStats = null; // Reset stats
+        }
+
+        function processStats(rows) {
+            let st = { t:0, o:0, w:0, ot:0, divs: {}, cross: {}, cJ: {}, otD:{f:0, o:0, u:0} };
+
+            rows.forEach(r => {
+                let k = Object.keys(r);
+                if(k.length === 0) return;
+
+                let causeRaw = r['สาเหตุ'] || r[k.find(x => x && safeStr(x).includes('สาเหตุ'))] || r[k[4]];
+                let rs = safeStr(causeRaw).toLowerCase();
+
+                let reqDate = safeStr(r['วันที่ยื่นคำร้อง']);
+                if(!rs && !reqDate) return;
+
+                st.t++;
+                let m='ot';
+
+                if(rs.includes('wfh') || rs.includes('home')) {
+                    st.w++; m='wfh';
+                } else if(rs.includes('สำนักงาน') || rs.includes('สนง')) {
+                    st.o++; m='off';
+                } else {
+                    st.ot++;
+                    if(rs.match(/ตรวจ|พื้นที่|นอกสถานที่/)) st.otD.f++;
+                    else if(rs.match(/สำนัก/)) st.otD.o++;
+                    else st.otD.u++;
+                }
+
+                let actualDivRaw = r['สังกัดตามปฏิบัติจริง'] || r[k[8]];
+                let sectionRaw = r['ส่วน'] || r[k[9]];
+
+                let dI = safeStr(actualDivRaw);
+                let dJ = safeStr(sectionRaw) || 'ไม่ระบุ';
+
+                if(dJ==='กลาง') dJ='ส่วนกลาง';
+                if(dJ==='ภูมิภาค') dJ='ส่วนภูมิภาค';
+
+                st.cJ[dJ] = (st.cJ[dJ]||0)+1;
+
+                if(!st.cross[dJ]) st.cross[dJ] = {off:0, wfh:0, ot:0};
+                st.cross[dJ][m]++;
+
+                if(dI && dI !== '-') {
+                    if(!st.divs[dI]) st.divs[dI] = {t:0, off:0, wfh:0, ot:0};
+                    st.divs[dI][m]++;
+                    st.divs[dI].t++;
+                }
+            });
+
+            // จัดเก็บสถานะปัจจุบันไว้ใช้งานกับ Export และ AI Summary
+            state.currentStats = st;
+
+            const pct = v => st.t > 0 ? ((v/state.totalPop)*100).toFixed(1)+'%' : '0%';
+
+            ['Total','Office','Wfh','Others'].forEach(k => {
+                let val = 0;
+                if(k==='Total') val = st.t;
+                else if(k==='Wfh') val = st.w;
+                else if(k==='Others') val = st.ot;
+                else if(k==='Office') val = st.o;
+
+                let el = document.getElementById('metric'+k);
+                let pctEl = document.getElementById('metric'+k+'Pct');
+                if(el) el.innerText = val.toLocaleString();
+                if(pctEl) pctEl.innerText = pct(val);
+            });
+
+            document.getElementById('pbTotal').style.width = Math.min((st.t/state.totalPop)*100,100)+'%';
+
+            Object.values(charts).forEach(c => { if(c && typeof c.destroy === 'function') c.destroy(); });
+
+            const dOp = {
+                responsive:true, maintainAspectRatio:false,
+                plugins:{
+                    datalabels:{
+                        color: (ctx) => ctx.dataset.backgroundColor[ctx.dataIndex] === cColors.emp ? '#64748b' : '#fff',
+                        font:{weight:'bold', family:"'Prompt', sans-serif", size: 14},
+                        formatter:v=>v||''
+                    },
+                    legend: { labels: { font: { family: "'Prompt', sans-serif", size: 13 } } }
+                }
+            };
+
+            let ch1 = document.getElementById('modalityChart');
+            if(ch1) {
+                charts.m = new Chart(ch1, {
+                    type:'doughnut',
+                    data:{
+                        labels:['สำนักงาน','WFH','อื่นๆ','ยังไม่ระบุ'],
+                        datasets:[{
+                            data:[st.o, st.w, st.ot, Math.max(state.totalPop-st.t, 0)],
+                            backgroundColor:[cColors.off, cColors.wfh, cColors.oth, cColors.emp],
+                            borderWidth: 2, borderColor: '#ffffff'
+                        }]
+                    },
+                    options:{...dOp, cutout:'65%'}
+                });
+            }
+
+            let aL = Object.keys(st.cJ);
+            let ch2 = document.getElementById('affiliationChart');
+            if(ch2 && aL.length > 0) {
+                charts.a = new Chart(ch2, {
+                    type:'doughnut',
+                    data:{
+                        labels:aL,
+                        datasets:[{
+                            data:aL.map(k=>st.cJ[k]),
+                            backgroundColor:cColors.pal,
+                            borderWidth: 2, borderColor: '#ffffff'
+                        }]
+                    },
+                    options:{...dOp, cutout:'65%'}
+                });
+            }
+
+            let cL = Object.keys(st.cross);
+            let ch3 = document.getElementById('crossChart');
+            if(ch3 && cL.length > 0) {
+                charts.c = new Chart(ch3, {
+                    type:'bar',
+                    data:{
+                        labels:cL,
+                        datasets:[
+                            {label:'สนง.', data:cL.map(k=>st.cross[k].off), backgroundColor:cColors.off, borderRadius:6},
+                            {label:'WFH', data:cL.map(k=>st.cross[k].wfh), backgroundColor:cColors.wfh, borderRadius:6},
+                            {label:'อื่นๆ', data:cL.map(k=>st.cross[k].ot), backgroundColor:cColors.oth, borderRadius:6}
+                        ]
+                    },
+                    options:{
+                        responsive:true, maintainAspectRatio:false, plugins: { legend: { position: 'top', labels: {font: {family: "'Prompt', sans-serif"}} } },
+                        scales:{
+                            x:{grid:{display:false}, ticks: {font: {family: "'Prompt', sans-serif"}}},
+                            y:{grid:{color:'#f1f5f9', borderDash:[5,5]}, border:{display:false}, ticks: {font: {family: "'Prompt', sans-serif"}}}
+                        }
+                    }
+                });
+            }
+
+            let ch4 = document.getElementById('othersChart');
+            if(ch4) {
+                charts.o = new Chart(ch4, {
+                    type:'bar',
+                    data:{
+                        labels:['ลงพื้นที่','สำนักอื่น','ไม่ระบุ'],
+                        datasets:[{
+                            data:[st.otD.f, st.otD.o, st.otD.u],
+                            backgroundColor:[cColors.oth,'#ec4899','#cbd5e1'],
+                            borderRadius:8, barPercentage: 0.7
+                        }]
+                    },
+                    options:{
+                        indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+                        scales:{
+                            x:{grid:{color:'#f1f5f9', borderDash:[5,5]}, border:{display:false}, ticks: {font: {family: "'Prompt', sans-serif"}}},
+                            y:{grid:{display:false}, ticks: {font: {family: "'Prompt', sans-serif", size: 14}}}
+                        }
+                    }
+                });
+            }
+
+            // ปรับขนาดฟอนต์ในตารางให้ใหญ่ขึ้น (text-base md:text-lg) สำหรับอ่านสบายตา
+            let tb = Object.entries(st.divs)
+                .sort((a,b) => b[1].t - a[1].t)
+                .map((d,i) => `<div class="flex hover:bg-slate-50 transition-colors text-base md:text-lg border-b border-slate-100 last:border-b-0">
+                    <div class="w-20 shrink-0 p-4 md:p-5 text-center text-slate-500 font-medium border-r border-slate-200 flex items-center justify-center">${i+1}</div>
+                    <div class="flex-1 min-w-[250px] p-4 md:p-5 text-left font-semibold text-slate-800 border-r border-slate-200 flex items-center truncate" title="${d[0]}">${d[0]}</div>
+                    <div class="w-28 shrink-0 p-4 md:p-5 text-center font-bold text-slate-900 bg-slate-50/50 border-r border-slate-200 flex items-center justify-center text-lg">${d[1].t}</div>
+                    <div class="w-28 shrink-0 p-4 md:p-5 text-center text-indigo-600 font-medium border-r border-slate-200 flex items-center justify-center">${d[1].off}</div>
+                    <div class="w-28 shrink-0 p-4 md:p-5 text-center text-emerald-600 font-medium border-r border-slate-200 flex items-center justify-center">${d[1].wfh}</div>
+                    <div class="w-28 shrink-0 p-4 md:p-5 text-center text-amber-500 font-medium flex items-center justify-center">${d[1].ot}</div>
+                </div>`).join('');
+
+            document.getElementById('summaryTableBody').innerHTML = tb || '<div class="p-8 md:p-12 text-center text-slate-500 text-lg">ไม่มีข้อมูลแยกตามสำนัก</div>';
+        }
+
+        function generateAISummary() {
+            let report = `📢 สรุปภาพรวมการปฏิบัติงาน\n`;
+            report += `ประจำวันที่: ${document.getElementById('dateSelectDisplay').innerText}\n`;
+            report += `=========================================\n\n`;
+
+            const total = document.getElementById('metricTotal').innerText;
+            const pct = document.getElementById('metricTotalPct').innerText;
+            const off = document.getElementById('metricOffice').innerText;
+            const wfh = document.getElementById('metricWfh').innerText;
+            const oth = document.getElementById('metricOthers').innerText;
+
+            report += `👥 จำนวนบุคลากรลงเวลาทั้งสิ้น: ${total} คน (คิดเป็น ${pct} ของทั้งหมด)\n\n`;
+            report += `📍 รูปแบบการปฏิบัติงาน:\n`;
+            report += `  - 🏢 ปฏิบัติงาน ณ สำนักงาน: ${off} คน\n`;
+            report += `  - 🏠 ปฏิบัติงานรูปแบบ WFH: ${wfh} คน\n`;
+            report += `  - 🚗 ลงพื้นที่/อื่นๆ: ${oth} คน\n\n`;
+
+            if(state.currentStats && state.currentStats.divs) {
+                let sorted = Object.entries(state.currentStats.divs).sort((a,b) => b[1].t - a[1].t);
+                if(sorted.length > 0) {
+                    report += `📊 3 อันดับสำนักที่มีผู้ลงเวลาสูงสุด:\n`;
+                    for(let i=0; i<Math.min(3, sorted.length); i++) {
+                        report += `  ${i+1}. ${sorted[i][0]} (${sorted[i][1].t} คน)\n`;
+                    }
+                    report += `\n`;
+                }
+            }
+
+            report += `💡 วิเคราะห์เบื้องต้น:\n`;
+            let offNum = parseInt(off.replace(/,/g, '')) || 0;
+            let wfhNum = parseInt(wfh.replace(/,/g, '')) || 0;
+            if(wfhNum > offNum) {
+                report += `วันนี้สัดส่วนผู้ปฏิบัติงานที่บ้าน (WFH) มีจำนวนมากกว่าผู้ที่เข้ามาปฏิบัติงานในสำนักงาน`;
+            } else if (offNum > wfhNum) {
+                report += `วันนี้บุคลากรส่วนใหญ่เข้ามาปฏิบัติงาน ณ สำนักงานตามปกติ`;
+            } else {
+                report += `วันนี้มีสัดส่วนผู้ปฏิบัติงานที่สำนักงานและ WFH ใกล้เคียงกัน`;
+            }
+
+            document.getElementById('reportTextarea').value = report;
+        }
+
+        function openReportModal(){
+            document.getElementById('reportModal').classList.remove('hidden');
+            generateAISummary();
+        }
+        function closeModals(){
+            document.getElementById('reportModal').classList.add('hidden');
+        }
+
+        function exportDailyData() {
+            if(!state.currentStats || !state.currentStats.divs || Object.keys(state.currentStats.divs).length === 0) {
+                return alert('ยังไม่มีข้อมูลสำหรับส่งออก กรุณารอให้ระบบโหลดข้อมูลสำเร็จก่อนครับ');
+            }
+
+            let csv = '﻿'; // แทรก BOM ป้องกันภาษาไทยเพี้ยนใน Excel
+            csv += 'ลำดับ,รายชื่อสังกัด / สำนัก,รวมลงเวลา,สำนักงาน,WFH,อื่นๆ\n';
+
+            let sortedDivs = Object.entries(state.currentStats.divs).sort((a,b) => b[1].t - a[1].t);
+
+            sortedDivs.forEach((d, index) => {
+                let name = d[0].replace(/"/g, '""'); // จัดการ escape quote
+                csv += `"${index + 1}","${name}",${d[1].t},${d[1].off},${d[1].wfh},${d[1].ot}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const currentDateText = document.getElementById('dateSelectDisplay').innerText.replace(/\s+/g, '_');
+
+            link.href = url;
+            link.setAttribute('download', `สถิติ_${currentDateText}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>

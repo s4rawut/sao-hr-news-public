@@ -1,0 +1,26 @@
+---
+interface Props {
+	size?: number;
+}
+const { size = 40 } = Astro.props;
+---
+
+<svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+	<defs>
+		<linearGradient id="hr-logo-g" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0" stop-color="#22b8e0" />
+			<stop offset="1" stop-color="#1f8f5a" />
+		</linearGradient>
+	</defs>
+	<circle cx="24" cy="24" r="23" fill="#fff" stroke="#e3ecf0" />
+	<text
+		x="24"
+		y="31"
+		text-anchor="middle"
+		font-family="Arial Black, Arial, sans-serif"
+		font-weight="900"
+		font-size="20"
+		fill="url(#hr-logo-g)">HR</text
+	>
+	<path d="M9 33 Q24 41 39 33" stroke="#f0b429" stroke-width="2.4" fill="none" stroke-linecap="round" />
+</svg>

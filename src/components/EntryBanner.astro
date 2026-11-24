@@ -1,0 +1,441 @@
+---
+import { siteLink } from "../utils/site-link";
+import { getEmDashCollection } from "emdash";
+import { Image } from "emdash/ui";
+import { getSiteInfo } from "../utils/site-info";
+import Icon from "./Icon.astro";
+
+/**
+ * Banner popup on the homepage, shown before the "มีอะไรใหม่" popup — for occasions such as
+ * mourning or royal tributes. Banners come from admin → "ป๊อปอัพแบนเนอร์หน้าแรก" (only those with
+ * "แสดงแบนเนอร์นี้" ticked, by ลำดับ) and the whole popup is switched by "เปิดใช้ป๊อปอัพแบนเนอร์หน้าแรก"
+ * in ข้อมูลเว็บไซต์. Several banners slide. A banner with an uploaded image shows the image;
+ * otherwise its text fields are laid out in the chosen style. Shown once per browser session.
+ */
+const info = await getSiteInfo();
+const { entries, cacheHint } = info.show_entry_banners
+	? await getEmDashCollection("entry_banners", { limit: 50 })
+	: { entries: [], cacheHint: undefined };
+if (Astro.cache?.enabled && cacheHint) Astro.cache.set(cacheHint);
+
+const banners = entries
+	.filter((b) => b.data.show)
+	.sort((a, b) => (a.data.sort_order ?? Infinity) - (b.data.sort_order ?? Infinity));
+
+const styleClass = (s?: string | null) =>
+	s?.startsWith("ไว้ทุกข์ (ขาว)") ? "eb-light" : s?.startsWith("เฉลิมพระเกียรติ") ? "eb-royal" : "eb-dark";
+const lines = (t?: string | null) => (t ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+---
+
+{
+	banners.length > 0 && (
+		<dialog class="eb" data-entry-banner aria-label="ประกาศ">
+			<link rel="stylesheet" href="/fonts/noto-serif-thai.css" />
+			<div class="eb-box">
+				<button type="button" class="eb-close" data-eb-close aria-label="ปิด">
+					<Icon name="close" size={20} />
+				</button>
+
+				<div class="eb-stage">
+					{banners.map((b, i) => {
+						const link = siteLink(b.data.link);
+						const external = !!link && /^https?:\/\//.test(link);
+						const body = b.data.image ? (
+							<div class="eb-slide eb-image">
+								<Image image={b.data.image} alt={b.data.image.alt || b.data.title} loading={i === 0 ? "eager" : "lazy"} />
+							</div>
+						) : (
+							<div class:list={["eb-slide", "eb-text", styleClass(b.data.style)]}>
+								<svg class="eb-ribbon" viewBox="0 0 60 92" aria-hidden="true">
+									<path d="M30 6c-10 0-17 8-17 17 0 6 4 13 10 19L7 86l13-4 6 10 4-30 4 30 6-10 13 4-16-44c6-6 10-13 10-19 0-9-7-17-17-17zm0 9c5 0 8 4 8 8 0 4-3 9-8 15-5-6-8-11-8-15 0-4 3-8 8-8z" />
+								</svg>
+								<div class="eb-frame">
+									{b.data.top_text && <p class="eb-top">{b.data.top_text}</p>}
+									{lines(b.data.main_text).length > 0 && (
+										<h2 class="eb-main">
+											{lines(b.data.main_text).map((l) => (
+												<span>{l}</span>
+											))}
+										</h2>
+									)}
+									{lines(b.data.message).length > 0 && (
+										<p class="eb-msg">
+											{lines(b.data.message).map((l) => (
+												<span>{l}</span>
+											))}
+										</p>
+									)}
+									{lines(b.data.signature).length > 0 && (
+										<p class="eb-sign">
+											{lines(b.data.signature).map((l) => (
+												<span>{l}</span>
+											))}
+										</p>
+									)}
+								</div>
+							</div>
+						);
+						return (
+							<div class="eb-item" data-eb-slide hidden={i !== 0} aria-roledescription="สไลด์" aria-label={`${i + 1} จาก ${banners.length}`}>
+								{link ? (
+									<a href={link} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined} class="eb-link">
+										{body}
+									</a>
+								) : (
+									body
+								)}
+							</div>
+						);
+					})}
+
+					{banners.length > 1 && (
+						<>
+							<button type="button" class="eb-arrow eb-prev" data-eb-step="-1" aria-label="แบนเนอร์ก่อนหน้า">
+								<Icon name="chevron-left" size={22} />
+							</button>
+							<button type="button" class="eb-arrow eb-next" data-eb-step="1" aria-label="แบนเนอร์ถัดไป">
+								<Icon name="chevron-right" size={22} />
+							</button>
+						</>
+					)}
+				</div>
+
+				<div class="eb-foot">
+					{banners.length > 1 && (
+						<span class="eb-dots" role="group" aria-label="เลือกแบนเนอร์">
+							{banners.map((_, i) => (
+								<button type="button" data-eb-go={i} class:list={{ "is-active": i === 0 }} aria-label={`แบนเนอร์ที่ ${i + 1}`} />
+							))}
+						</span>
+					)}
+					<button type="button" class="eb-enter" data-eb-close>
+						เข้าสู่เว็บไซต์
+					</button>
+				</div>
+			</div>
+		</dialog>
+	)
+}
+
+<script>
+	const eb = document.querySelector<HTMLDialogElement>("[data-entry-banner]");
+	if (eb) {
+		const KEY = "hr-entry-banner-seen";
+		let seen = false;
+		try {
+			seen = sessionStorage.getItem(KEY) === "1";
+		} catch {}
+		const slides = [...eb.querySelectorAll<HTMLElement>("[data-eb-slide]")];
+		const dots = [...eb.querySelectorAll<HTMLButtonElement>("[data-eb-go]")];
+		let current = 0;
+		const go = (i: number) => {
+			current = (i + slides.length) % slides.length;
+			slides.forEach((s, n) => (s.hidden = n !== current));
+			dots.forEach((d, n) => {
+				d.classList.toggle("is-active", n === current);
+				d.setAttribute("aria-current", String(n === current));
+			});
+		};
+		const close = () => {
+			try {
+				sessionStorage.setItem(KEY, "1");
+			} catch {}
+			eb.close();
+		};
+		eb.querySelectorAll("[data-eb-close]").forEach((b) => b.addEventListener("click", close));
+		eb.querySelectorAll<HTMLButtonElement>("[data-eb-step]").forEach((b) => b.addEventListener("click", () => go(current + Number(b.dataset.ebStep))));
+		dots.forEach((d) => d.addEventListener("click", () => go(Number(d.dataset.ebGo))));
+		eb.addEventListener("click", (e) => {
+			if (e.target === eb) close();
+		});
+		eb.addEventListener("cancel", () => {
+			try {
+				sessionStorage.setItem(KEY, "1");
+			} catch {}
+		});
+		let paused = false;
+		eb.addEventListener("mouseenter", () => (paused = true));
+		eb.addEventListener("mouseleave", () => (paused = false));
+		if (slides.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			setInterval(() => {
+				if (eb.open && !paused) go(current + 1);
+			}, 7000);
+		}
+		if (!seen) eb.showModal();
+	}
+</script>
+
+<style>
+	.eb {
+		width: min(980px, calc(100vw - 32px));
+		max-height: calc(100dvh - 32px);
+		padding: 0;
+		border: 0;
+		border-radius: 18px;
+		overflow: auto;
+		background: #111;
+		color: #fff;
+		box-shadow: 0 30px 80px rgb(0 0 0 / 50%);
+	}
+
+	.eb::backdrop {
+		background: rgb(0 0 0 / 72%);
+	}
+
+	.eb-box {
+		position: relative;
+	}
+
+	.eb-close {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		z-index: 3;
+		display: grid;
+		place-items: center;
+		width: 38px;
+		height: 38px;
+		border: 0;
+		border-radius: 50%;
+		background: rgb(0 0 0 / 45%);
+		color: #fff;
+		cursor: pointer;
+	}
+
+	.eb-close:hover {
+		background: rgb(0 0 0 / 70%);
+	}
+
+	.eb-stage {
+		position: relative;
+	}
+
+	.eb-item[hidden] {
+		display: none;
+	}
+
+	.eb-link {
+		display: block;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.eb-slide {
+		position: relative;
+		aspect-ratio: 16 / 9;
+		max-width: 100%;
+		overflow: hidden;
+	}
+
+	.eb-image {
+		background: #000;
+	}
+
+	.eb-image :global(img) {
+		width: 100%;
+		height: 100%;
+		max-width: none;
+		object-fit: contain;
+	}
+
+	/* text banners: centred lines inside a thin double frame, a mourning ribbon in the corner */
+	.eb-text {
+		display: grid;
+		place-items: center;
+		padding: clamp(18px, 4vw, 44px);
+		text-align: center;
+	}
+
+	.eb-frame {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: clamp(8px, 1.6vw, 16px);
+		width: 100%;
+		height: 100%;
+		padding: clamp(16px, 3.4vw, 40px);
+		border: 1px solid var(--eb-line);
+		outline: 1px solid var(--eb-line);
+		outline-offset: 6px;
+	}
+
+	.eb-top {
+		margin: 0;
+		font-family: "Noto Serif Thai", serif;
+		font-size: clamp(1.1rem, 3.2vw, 2.2rem);
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		color: var(--eb-accent);
+	}
+
+	.eb-main {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15em;
+		margin: 0;
+		font-family: "Noto Serif Thai", serif;
+		font-size: clamp(0.95rem, 2.5vw, 1.75rem);
+		font-weight: 600;
+		line-height: 1.5;
+		color: var(--eb-fg);
+		text-wrap: balance;
+	}
+
+	.eb-msg {
+		display: flex;
+		flex-direction: column;
+		margin: 0;
+		padding-top: clamp(6px, 1.2vw, 12px);
+		font-family: "Noto Serif Thai", serif;
+		font-size: clamp(0.85rem, 2vw, 1.3rem);
+		font-weight: 500;
+		color: var(--eb-fg);
+	}
+
+	.eb-msg::before {
+		content: "";
+		align-self: center;
+		width: clamp(60px, 12vw, 140px);
+		height: 1px;
+		margin-bottom: clamp(8px, 1.4vw, 14px);
+		background: var(--eb-line);
+	}
+
+	.eb-sign {
+		display: flex;
+		flex-direction: column;
+		margin: 0;
+		font-size: clamp(0.66rem, 1.4vw, 0.92rem);
+		line-height: 1.6;
+		color: var(--eb-muted);
+	}
+
+	.eb-ribbon {
+		position: absolute;
+		top: clamp(10px, 2vw, 22px);
+		left: clamp(12px, 2.4vw, 28px);
+		width: clamp(26px, 4.4vw, 46px);
+		height: auto;
+		fill: var(--eb-ribbon);
+	}
+
+	.eb-dark {
+		--eb-fg: #f2f2f2;
+		--eb-accent: #ffffff;
+		--eb-muted: #bdbdbd;
+		--eb-line: rgb(255 255 255 / 35%);
+		--eb-ribbon: #e9e9e9;
+		background: radial-gradient(ellipse at 50% 35%, #2b2b2b, #0b0b0b 70%);
+	}
+
+	.eb-light {
+		--eb-fg: #1a1a1a;
+		--eb-accent: #000000;
+		--eb-muted: #555555;
+		--eb-line: rgb(0 0 0 / 30%);
+		--eb-ribbon: #111111;
+		background: radial-gradient(ellipse at 50% 35%, #ffffff, #e6e6e6 75%);
+	}
+
+	.eb-royal {
+		--eb-fg: #fdf6e3;
+		--eb-accent: #e3c060;
+		--eb-muted: #d9c99a;
+		--eb-line: rgb(227 192 96 / 55%);
+		--eb-ribbon: #e3c060;
+		background: radial-gradient(ellipse at 50% 35%, #1f3f86, #0c1d45 72%);
+	}
+
+	.eb-royal .eb-ribbon {
+		display: none;
+	}
+
+	.eb-arrow {
+		position: absolute;
+		top: 50%;
+		z-index: 2;
+		display: grid;
+		place-items: center;
+		width: 42px;
+		height: 42px;
+		border: 0;
+		border-radius: 50%;
+		background: rgb(0 0 0 / 40%);
+		color: #fff;
+		transform: translateY(-50%);
+		cursor: pointer;
+	}
+
+	.eb-arrow:hover {
+		background: rgb(0 0 0 / 65%);
+	}
+
+	.eb-prev {
+		left: 10px;
+	}
+
+	.eb-next {
+		right: 10px;
+	}
+
+	.eb-foot {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 12px 16px;
+		background: #111;
+	}
+
+	.eb-dots {
+		display: flex;
+		gap: 8px;
+	}
+
+	.eb-dots button {
+		width: 10px;
+		height: 10px;
+		padding: 0;
+		border: 0;
+		border-radius: 50%;
+		background: rgb(255 255 255 / 35%);
+		cursor: pointer;
+	}
+
+	.eb-dots button.is-active {
+		width: 26px;
+		border-radius: 999px;
+		background: #fff;
+	}
+
+	.eb-enter {
+		margin-left: auto;
+		padding: 9px 26px;
+		border: 1px solid rgb(255 255 255 / 60%);
+		border-radius: 999px;
+		background: transparent;
+		color: #fff;
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.eb-enter:hover {
+		background: #fff;
+		color: #111;
+	}
+
+	@media (max-width: 560px) {
+		/* text banners get taller on phones so the long titles stay readable */
+		.eb-text {
+			aspect-ratio: 4 / 5;
+		}
+
+		.eb-arrow {
+			width: 34px;
+			height: 34px;
+		}
+	}
+</style>

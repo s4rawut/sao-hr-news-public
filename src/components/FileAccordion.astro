@@ -1,0 +1,549 @@
+---
+import CopyLink from "./CopyLink.astro";
+import { showNewBadge } from "../utils/post-date";
+import { getSiteInfo } from "../utils/site-info";
+import { byPostDate } from "../utils/post-date";
+import { getEmDashCollection, getTaxonomyTermsWithCacheHint } from "emdash";
+import { FILE_PAGE_TAXONOMY, PAGE_TAB_LAYOUTS, findFilePageTerm } from "../utils/page-files";
+import { mediaUrl } from "../utils/site-info";
+import Icon from "./Icon.astro";
+
+/**
+ * Stacked open/close bars of uploaded PDFs/images for one page. Files are picked in admin
+ * under "ไฟล์เอกสารในหน้าเว็บ" by ticking the page in "หน้าที่แสดงไฟล์".
+ * Renders nothing when the page has no matching term, so ordinary pages are unaffected.
+ */
+interface Props {
+	pageSlug: string;
+	pageTitle: string;
+	/** Show nothing (instead of "no files") when the page has no files */
+	hideEmpty?: boolean;
+	/** Open the first bar on load (default). Off = every bar starts closed. */
+	openFirst?: boolean;
+	/** Only files whose "แท็บ" field is one of these (used inside a page tab, e.g. โครงสร้าง) */
+	onlyTabs?: string[];
+	/** Leave out files whose "แท็บ" field is one of these (they are shown inside that page tab) */
+	skipTabs?: string[];
+}
+const { pageSlug, pageTitle, hideEmpty = false, openFirst = true, onlyTabs, skipTabs } = Astro.props;
+const tabValue = (e: { data: { tab?: string | null } }) => e.data.tab?.trim() ?? "";
+
+const newBadgeDays = (await getSiteInfo()).new_badge_days;
+const termsResult = await getTaxonomyTermsWithCacheHint(FILE_PAGE_TAXONOMY);
+const term = findFilePageTerm(termsResult.data, pageSlug, pageTitle);
+const { entries, cacheHint } = term
+	? await getEmDashCollection("infographics", {
+			where: { [FILE_PAGE_TAXONOMY]: term.slug },
+			orderBy: { published_at: "desc" },
+			limit: 500,
+		})
+	: { entries: [], cacheHint: undefined };
+if (Astro.cache?.enabled) {
+	Astro.cache.set(termsResult.cacheHint);
+	if (cacheHint) Astro.cache.set(cacheHint);
+}
+
+type Kind = "pdf" | "image" | "other";
+const kindOf = (file: { mimeType?: string; filename?: string } | undefined): Kind => {
+	const mime = file?.mimeType ?? "";
+	const name = (file?.filename ?? "").toLowerCase();
+	if (mime === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+	if (mime.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/.test(name)) return "image";
+	return "other";
+};
+
+const items = byPostDate(entries)
+	.filter((e) => (onlyTabs ? onlyTabs.includes(tabValue(e)) : !skipTabs?.includes(tabValue(e))))
+	.sort((a, b) => (a.data.sort_order ?? Infinity) - (b.data.sort_order ?? Infinity))
+	.map((e) => {
+		const kind = kindOf(e.data.file);
+		const url = mediaUrl(e.data.file);
+		const key = e.data.file?.meta?.storageKey;
+		// PDFs are shown through /files/pdf/ so they display in the page instead of downloading.
+		const viewUrl = kind === "pdf" && typeof key === "string" ? `/files/pdf/${encodeURIComponent(key)}` : url;
+		return { entry: e, url, viewUrl, kind };
+	});
+
+// Items with a "หัวข้อกลุ่ม" are shown under that heading; ungrouped items come first, as before.
+type Item = (typeof items)[number];
+type Section = { heading: string | null; items: Item[] };
+const groupInto = (list: Item[], fixed: string[] = []) => {
+	const sections: Section[] = fixed.map((heading) => ({ heading, items: [] }));
+	for (const item of list) {
+		const heading = item.entry.data.group?.trim() || null;
+		let section = sections.find((s) => s.heading === heading);
+		if (!section) {
+			section = { heading, items: [] };
+			if (heading === null) sections.unshift(section);
+			else sections.push(section);
+		}
+		section.items.push(item);
+	}
+	return sections;
+};
+
+// Pages with a tab layout (e.g. คำบรรยายลักษณะงาน: 2567 / 2561) get year tabs, each with a fixed
+// list of group dropdowns; every other page is a single panel exactly as before.
+const tabLayout = term && !onlyTabs ? (PAGE_TAB_LAYOUTS[pageSlug] ?? PAGE_TAB_LAYOUTS[decodeURIComponent(term.slug)]) : undefined;
+const tabOf = (item: Item) => {
+	const t = item.entry.data.tab?.trim();
+	return tabLayout?.some((l) => l.key === t) ? t : tabLayout?.[0]?.key;
+};
+const panels = tabLayout
+	? tabLayout.map((l) => ({ key: l.key, label: l.label, status: l.status, sections: groupInto(items.filter((i) => tabOf(i) === l.key), l.groups) }))
+	: [{ key: "", label: "", status: undefined as string | undefined, sections: groupInto(items) }];
+const firstId = openFirst && !tabLayout ? panels[0]?.sections[0]?.items[0]?.entry.id : undefined;
+const hasContent = items.length > 0 || !!tabLayout;
+---
+
+{
+	!term || (hideEmpty && !hasContent) ? null : !hasContent ? (
+		<p class="acc-empty">ยังไม่มีไฟล์ในหน้านี้</p>
+	) : (
+		<div class="acc-tabs-wrap" data-acc-tabs>
+		{tabLayout && (
+			<div class="acc-tabs" role="tablist">
+				{panels.map((p, i) => (
+					<button type="button" role="tab" class:list={["acc-tab", { "is-active": i === 0 }]} aria-selected={i === 0 ? "true" : "false"} data-acc-tab={p.key}>
+						{p.label}
+						{p.status && <span class="acc-tab-status">{p.status}</span>}
+					</button>
+				))}
+			</div>
+		)}
+		{panels.map((panel, pi) => {
+		const collapsibleGroups = !!tabLayout || panel.sections.filter((s) => s.heading).length >= 2;
+		return (
+		<div class:list={["acc-sections", { "acc-panel": !!tabLayout }]} data-acc-panel={panel.key} hidden={pi > 0}>
+		{panel.sections.length === 0 && <p class="acc-empty">ยังไม่มีไฟล์</p>}
+		{panel.sections.map((section) => {
+		const dropdown = !!section.heading && collapsibleGroups;
+		const Box = dropdown ? "details" : "section";
+		const Head = dropdown ? "summary" : "h2";
+		return (
+		<Box class:list={["acc-section", { "acc-groupbox": dropdown }]}>
+		{section.heading && (
+			<Head class="acc-group">
+				<span class="acc-group-name">{section.heading}</span>
+				{dropdown && <span class="acc-group-count">{section.items.length > 0 ? `${section.items.length} รายการ` : "ยังไม่มีไฟล์"}</span>}
+				{dropdown && <span class="acc-group-chevron" aria-hidden="true"><Icon name="chevron-right" size={16} /></span>}
+			</Head>
+		)}
+		<div class="acc" data-accordion>
+			{section.items.length === 0 && <p class="acc-empty acc-empty-group">ยังไม่มีไฟล์ในหัวข้อนี้</p>}
+			{section.items.map(({ entry, url, viewUrl, kind }) => (
+				<details class="acc-item" id={`info-${entry.id}`} open={entry.id === firstId}>
+					<summary
+						{...(kind === "pdf" && url
+							? {
+									"data-preview-kind": "pdf",
+									"data-preview-view": viewUrl,
+									"data-preview-open": viewUrl,
+									"data-preview-download": url,
+									"data-preview-name": entry.data.file?.filename ?? `${entry.data.title}.pdf`,
+									"data-preview-title": entry.data.title,
+								}
+							: {})}
+					>
+						<span class:list={["acc-badge", kind]}>{kind === "pdf" ? "PDF" : kind === "image" ? "รูปภาพ" : "ไฟล์"}</span>
+						<span class="acc-head">
+							<span class="acc-title" {...entry.edit.title}>{entry.data.title}</span>
+							{showNewBadge(entry, newBadgeDays) && <span class="badge-new">ใหม่</span>}
+						</span>
+						<span class="acc-chevron" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
+					</summary>
+					<div class="acc-body">
+						<div class="acc-copy"><CopyLink target={`#info-${entry.id}`} /></div>
+						{entry.data.description && <p class="acc-desc">{entry.data.description}</p>}
+						{!url ? (
+							<p class="acc-desc">ยังไม่ได้แนบไฟล์</p>
+						) : kind === "pdf" ? (
+							<iframe class="acc-pdf" data-src={`${viewUrl}#toolbar=0&navpanes=0&view=FitH`} title={entry.data.title} />
+						) : kind === "image" ? (
+							<a href={url} target="_blank" rel="noopener noreferrer" class="acc-img">
+								<img src={url} alt={entry.data.title} loading="lazy" />
+							</a>
+						) : null}
+						{url && (
+							<div class="acc-actions">
+								<a class="button" href={viewUrl} target="_blank" rel="noopener noreferrer">
+									<Icon name="arrow" size={16} /> เปิดเต็มหน้าจอ
+								</a>
+								<a class="button" href={url} download={entry.data.file?.filename ?? ""}>
+									<Icon name="download" size={16} /> ดาวน์โหลด
+								</a>
+							</div>
+						)}
+					</div>
+				</details>
+			))}
+		</div>
+		</Box>
+		);
+		})}
+		</div>
+		);
+		})}
+		</div>
+	)
+}
+
+<script>
+	// Year tabs (pages with a tab layout): show one panel at a time.
+	document.querySelectorAll<HTMLElement>("[data-acc-tabs]").forEach((wrap) => {
+		const tabs = wrap.querySelectorAll<HTMLButtonElement>("[data-acc-tab]");
+		const panels = wrap.querySelectorAll<HTMLElement>("[data-acc-panel]");
+		tabs.forEach((tab) =>
+			tab.addEventListener("click", () => {
+				tabs.forEach((t) => {
+					const on = t === tab;
+					t.classList.toggle("is-active", on);
+					t.setAttribute("aria-selected", on ? "true" : "false");
+				});
+				panels.forEach((p) => (p.hidden = p.dataset.accPanel !== tab.dataset.accTab));
+			}),
+		);
+	});
+	// PDFs load only when their bar is opened, so a long list stays fast.
+	const load = (d: HTMLDetailsElement) => {
+		const frame = d.querySelector<HTMLIFrameElement>("iframe[data-src]");
+		if (d.open && frame && !frame.src) frame.src = frame.dataset.src!;
+	};
+	document.querySelectorAll<HTMLDetailsElement>("[data-accordion] details").forEach((d) => {
+		load(d);
+		d.addEventListener("toggle", () => load(d));
+	});
+	// Open the bar linked from search results (#info-slug).
+	const target = location.hash && document.querySelector<HTMLDetailsElement>(decodeURIComponent(location.hash));
+	if (target instanceof HTMLDetailsElement) {
+		target.open = true;
+		// A linked file inside a closed group dropdown: open the group too.
+		const group = target.parentElement?.closest<HTMLDetailsElement>("details.acc-groupbox");
+		if (group) group.open = true;
+		const panel = target.closest<HTMLElement>("[data-acc-panel]");
+		if (panel?.hidden) document.querySelector<HTMLButtonElement>(`[data-acc-tab="${panel.dataset.accPanel}"]`)?.click();
+		target.scrollIntoView({ block: "start" });
+	}
+</script>
+
+<style>
+	.acc-tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: 20px;
+		padding: 8px 8px 0;
+		border-radius: var(--radius) var(--radius) 0 0;
+		background: var(--color-primary-soft);
+	}
+
+	.acc-tab {
+		padding: 10px 18px;
+		border: 0;
+		border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+		background: transparent;
+		color: var(--color-primary-dark);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.acc-tab:hover {
+		background: rgb(255 255 255 / 55%);
+	}
+
+	.acc-tab.is-active {
+		background: var(--color-surface);
+		color: var(--color-primary);
+	}
+
+	.acc-panel {
+		padding: 16px;
+		border: 1px solid var(--color-primary-soft);
+		border-top: 0;
+		border-radius: 0 0 var(--radius) var(--radius);
+	}
+
+	.acc-panel > .acc-section:first-child,
+	.acc-panel > .acc-groupbox:first-child {
+		margin-top: 0;
+	}
+
+	.acc-empty-group {
+		margin: 0;
+		padding: 14px 4px;
+		color: var(--color-muted);
+		font-size: 0.9rem;
+	}
+
+	.acc-section + .acc-section {
+		margin-top: 32px;
+	}
+
+	.acc-group {
+		margin: 20px 0 0;
+		padding: 10px 16px;
+		border: 1px solid var(--color-border);
+		border-left: 4px solid var(--color-primary);
+		border-radius: 12px;
+		background: #fff;
+		color: var(--color-primary-dark);
+		font-size: 1rem;
+		font-weight: 600;
+	}
+
+	.acc-section + .acc-groupbox,
+	.acc-groupbox + .acc-section {
+		margin-top: 14px;
+	}
+
+	.acc-groupbox > summary.acc-group {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 16px;
+		cursor: pointer;
+		transition: filter 0.2s, border-radius 0.2s;
+	}
+
+	.acc-groupbox > summary.acc-group:hover {
+		background: var(--color-primary-soft);
+	}
+
+	.acc-group-name {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.acc-group-count {
+		flex-shrink: 0;
+		padding: 2px 10px;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		font-size: 0.75rem;
+		font-weight: 600;
+	}
+
+	.acc-group-chevron {
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		transition: transform 0.25s;
+	}
+
+	.acc-groupbox[open] > summary .acc-group-chevron {
+		transform: rotate(90deg);
+	}
+
+	.acc-groupbox > .acc {
+		margin-top: 12px;
+		padding-left: 14px;
+		border-left: 3px solid var(--color-primary-soft);
+	}
+
+	.acc {
+		display: grid;
+		gap: 8px;
+		margin-top: 20px;
+	}
+
+	.acc-item {
+		border: 1px solid var(--color-border);
+		border-radius: 10px;
+		background: var(--color-surface);
+		overflow: hidden;
+		transition: box-shadow 0.2s, border-color 0.2s;
+	}
+
+	.acc-item[open] {
+		border-color: rgb(15 111 135 / 35%);
+		box-shadow: var(--shadow);
+	}
+
+	.acc-item {
+		/* keep a linked bar clear of the sticky header */
+		scroll-margin-top: 130px;
+	}
+
+	.acc-actions .button {
+		text-decoration: none;
+	}
+
+	summary {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		padding: 16px 20px;
+		cursor: pointer;
+		list-style: none;
+		transition: background 0.2s;
+	}
+
+	.acc-item > summary {
+		gap: 10px;
+		padding: 9px 14px;
+	}
+
+	summary::-webkit-details-marker {
+		display: none;
+	}
+
+	summary:hover {
+		background: var(--color-primary-soft);
+	}
+
+	.acc-item[open] summary {
+		background: linear-gradient(90deg, var(--color-primary-soft), transparent);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.acc-badge {
+		flex-shrink: 0;
+		min-width: 46px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		font-size: 0.66rem;
+		font-weight: 700;
+		text-align: center;
+		color: #fff;
+		background: var(--color-primary);
+	}
+
+	.acc-badge.pdf {
+		background: #d6453d;
+	}
+
+	.acc-badge.image {
+		background: #2f9e6e;
+	}
+
+	.acc-head {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.acc-title {
+		font-weight: 500;
+		font-size: 0.88rem;
+		color: var(--color-text);
+	}
+
+
+	.acc-chevron {
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		transition: transform 0.25s, background 0.2s, color 0.2s;
+	}
+
+	.acc-item[open] .acc-chevron {
+		transform: rotate(90deg);
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	.acc-body {
+		padding: 18px 20px 20px;
+	}
+
+	.acc-desc {
+		margin: 0 0 14px;
+		color: var(--color-muted);
+	}
+
+	.acc-pdf {
+		display: block;
+		width: 100%;
+		height: min(85vh, 1100px);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: #f5f7f8;
+	}
+
+	.acc-img {
+		display: block;
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		border: 1px solid var(--color-border);
+		background: #f5f7f8;
+	}
+
+	.acc-img img {
+		width: 100%;
+		height: auto;
+		margin: 0 auto;
+	}
+
+	.acc-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		margin-top: 14px;
+	}
+
+	.acc-empty {
+		margin-top: 20px;
+		padding: 28px;
+		text-align: center;
+		color: var(--color-muted);
+		border: 1px dashed var(--color-border);
+		border-radius: var(--radius);
+	}
+
+	@media (max-width: 600px) {
+		summary {
+			padding: 14px 14px;
+			gap: 10px;
+		}
+
+		.acc-badge {
+			min-width: 0;
+		}
+
+		.acc-pdf {
+			height: 70vh;
+		}
+	}
+
+	.acc-tab-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		margin-left: 8px;
+		padding: 2px 10px;
+		border-radius: 999px;
+		background: #fff4e0;
+		color: #a35f00;
+		font-size: 0.75rem;
+		font-weight: 600;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+
+	.acc-tab-status::before {
+		content: "";
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.acc-copy {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: 8px;
+	}
+</style>

@@ -1,0 +1,745 @@
+---
+import { getEmDashCollection } from "emdash";
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+import Icon from "../components/Icon.astro";
+import Base from "../layouts/Base.astro";
+import { eventFallbackColor, eventTypeName, getEventTypes } from "../utils/event-types";
+import { getSiteInfo } from "../utils/site-info";
+import { adminDateTime, bangkokParts, formatThaiCompact, thaiMonths, thaiMonthsShort, thaiWeekdaysShort } from "../utils/thai-date";
+
+/**
+ * "ปฏิทินกิจกรรม" for a whole year (the homepage calendar's "ดูทั้งหมด"), laid out sideways: one row
+ * per month, one column per day (1–31). Each event is a bar in its "ประเภทกิจกรรม" colour that runs from
+ * "วันที่" to "ถึงวันที่" (continuing on the next month's row when it crosses a month). Holidays shade
+ * their day grey. Every year with events is rendered; the arrows switch years in the browser and
+ * ?y=2569 opens that year (Buddhist era).
+ */
+const now = new Date();
+const [info, eventsResult] = await Promise.all([
+	getSiteInfo(),
+	getEmDashCollection("events", { orderBy: { event_date: "asc" }, limit: 1000 }),
+]);
+if (Astro.cache?.enabled) {
+	Astro.cache.set(info.cacheHint);
+	if (eventsResult.cacheHint) Astro.cache.set(eventsResult.cacheHint);
+}
+// switched off in admin (ข้อมูลเว็บไซต์ → "เปิดใช้ปฏิทินรายปี"): the page does not exist
+if (!info.show_year_calendar) return Astro.rewrite("/404");
+const eventTypes = await getEventTypes();
+if (Astro.cache?.enabled && eventTypes.cacheHint) Astro.cache.set(eventTypes.cacheHint);
+
+const today = bangkokParts(now);
+const pad = (n: number) => String(n).padStart(2, "0");
+/** days since 1970 for a Bangkok calendar date — lets ranges be compared and walked day by day */
+const dayNo = (p: { year: number; month: number; day: number }) => Math.round(Date.UTC(p.year, p.month, p.day) / 86_400_000);
+const fromDayNo = (n: number) => {
+	const d = new Date(n * 86_400_000);
+	return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() };
+};
+const rangeText = (s: ReturnType<typeof fromDayNo>, e: ReturnType<typeof fromDayNo>) => {
+	const yy = (y: number) => String(y + 543).slice(-2);
+	if (dayNo(s) === dayNo(e)) return `${s.day} ${thaiMonthsShort[s.month]} ${yy(s.year)}`;
+	if (s.year === e.year && s.month === e.month) return `${s.day}–${e.day} ${thaiMonthsShort[s.month]} ${yy(s.year)}`;
+	return `${s.day} ${thaiMonthsShort[s.month]}${s.year !== e.year ? ` ${yy(s.year)}` : ""} – ${e.day} ${thaiMonthsShort[e.month]} ${yy(e.year)}`;
+};
+
+const events = eventsResult.entries.map((entry) => {
+	const start = dayNo(bangkokParts(adminDateTime(entry.data.event_date)));
+	const endRaw = entry.data.end_date ? dayNo(bangkokParts(adminDateTime(entry.data.end_date))) : start;
+	const end = Math.max(start, endRaw);
+	const link = entry.data.link?.trim() || "";
+	return {
+		id: entry.data.id,
+		title: entry.data.title,
+		description: entry.data.description,
+		holiday: !!entry.data.holiday,
+		type: eventTypeName(entry.data),
+		color: eventTypes.colorOf(eventTypeName(entry.data)),
+		link,
+		external: /^https?:\/\//.test(link),
+		start,
+		end,
+		range: rangeText(fromDayNo(start), fromDayNo(end)),
+	};
+});
+
+const eventYears = events.flatMap((e) => [fromDayNo(e.start).year, fromDayNo(e.end).year]);
+const fromYear = Math.min(today.year, ...eventYears);
+const toYear = Math.max(today.year, ...eventYears);
+const wanted = Number(Astro.url.searchParams.get("y")) - 543;
+const initialYear = wanted >= fromYear && wanted <= toYear ? wanted : today.year;
+const todayNo = dayNo(today);
+
+const years = Array.from({ length: toYear - fromYear + 1 }, (_, n) => {
+	const y = fromYear + n;
+	const months = Array.from({ length: 12 }, (_, m) => {
+		const first = dayNo({ year: y, month: m, day: 1 });
+		const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+		const last = first + daysInMonth - 1;
+		const inMonth = events.filter((e) => e.start <= last && e.end >= first);
+		const holidays = inMonth.filter((e) => e.holiday);
+		// bar pieces for this month's row, stacked into lanes so overlapping events don't cover each other
+		const pieces = inMonth
+			.filter((e) => !e.holiday)
+			.map((e) => ({
+				e,
+				from: Math.max(e.start, first) - first + 1,
+				to: Math.min(e.end, last) - first + 1,
+				contLeft: e.start < first,
+				contRight: e.end > last,
+				lane: 0,
+			}))
+			.sort((a, b) => a.from - b.from || b.to - b.from - (a.to - a.from));
+		const laneEnds: number[] = [];
+		for (const p of pieces) {
+			let lane = laneEnds.findIndex((end) => end < p.from);
+			if (lane < 0) lane = laneEnds.length;
+			laneEnds[lane] = p.to;
+			p.lane = lane;
+		}
+		const days = Array.from({ length: 31 }, (_, i) => {
+			const day = i + 1;
+			if (day > daysInMonth) return { day, blank: true as const };
+			const no = first + i;
+			const weekday = new Date(no * 86_400_000).getUTCDay();
+			const hol = holidays.filter((h) => h.start <= no && h.end >= no);
+			return {
+				day,
+				blank: false as const,
+				weekday,
+				weekend: weekday === 0 || weekday === 6,
+				today: no === todayNo,
+				holiday: hol.map((h) => h.title).join(", "),
+			};
+		});
+		return { m, days, pieces, lanes: Math.max(1, laneEnds.length), count: inMonth.length };
+	});
+	const yearStart = dayNo({ year: y, month: 0, day: 1 });
+	const yearEnd = dayNo({ year: y, month: 11, day: 31 });
+	const list = events.filter((e) => e.start <= yearEnd && e.end >= yearStart);
+	const byMonth = Array.from({ length: 12 }, (_, m) => ({
+		m,
+		items: list.filter((e) => {
+			const s = fromDayNo(Math.max(e.start, yearStart));
+			return s.month === m;
+		}),
+	})).filter((g) => g.items.length > 0);
+	return { y, months, byMonth, count: list.length };
+});
+
+// legend: the admin's type options in their colours, plus holiday / today
+const legend = eventTypes.types.map((t) => [t.title, t.color] as const);
+const heading = info.heading_calendar || "ปฏิทินกิจกรรม";
+---
+
+<Base title={heading}>
+	<Breadcrumbs items={[{ label: heading }]} />
+
+	<div class="yc" data-year-cal>
+		<header class="yc-head">
+			<h1 class="section-title">
+				{heading}
+				<small>วันนี้ {formatThaiCompact(now)}</small>
+			</h1>
+			<div class="yc-switch">
+				<button type="button" class="yc-nav" data-year-step="-1" aria-label="ปีก่อนหน้า"><Icon name="chevron-left" size={16} /></button>
+				{years.map((yr) => (
+					<strong class="yc-year" data-year-label={yr.y} hidden={yr.y !== initialYear}>ปี {yr.y + 543}</strong>
+				))}
+				<button type="button" class="yc-nav" data-year-step="1" aria-label="ปีถัดไป"><Icon name="chevron-right" size={16} /></button>
+			</div>
+		</header>
+
+		<ul class="yc-legend" aria-label="คำอธิบายสี">
+			{legend.map(([label, color]) => (
+				<li><span class="sw" style={`--c: ${color}`}></span>{label}</li>
+			))}
+			<li><span class="sw sw-holiday"></span>วันหยุด</li>
+			<li><span class="sw sw-today"></span>วันนี้</li>
+		</ul>
+
+		{years.map((yr) => (
+			<section class="yc-block" data-year={yr.y} hidden={yr.y !== initialYear} aria-label={`ปฏิทินปี ${yr.y + 543}`}>
+				<div class="card tl-card">
+					<div class="tl-scroll">
+						<div class="tl" role="table" aria-label={`กิจกรรมรายเดือน ปี ${yr.y + 543}`}>
+							<div class="tl-row tl-headrow" role="row">
+								<span class="tl-label" role="columnheader">เดือน</span>
+								{Array.from({ length: 31 }, (_, i) => (
+									<span class="tl-dnum" role="columnheader" style={`grid-column: ${i + 2}`}>{i + 1}</span>
+								))}
+							</div>
+							{yr.months.map((mo) => (
+								<div
+									class:list={["tl-row", { "is-current": yr.y === today.year && mo.m === today.month }]}
+									role="row"
+									style={`--lanes: ${mo.lanes}`}
+								>
+									<span class="tl-label" role="rowheader">
+										{thaiMonths[mo.m]}
+										{mo.count > 0 && <small>{mo.count}</small>}
+									</span>
+									{mo.days.map((d) =>
+										d.blank ? (
+											<span class="tl-day blank" style={`grid-column: ${d.day + 1}`} aria-hidden="true" />
+										) : (
+											<span
+												class:list={["tl-day", { weekend: d.weekend, today: d.today, holiday: !!d.holiday }]}
+												style={`grid-column: ${d.day + 1}`}
+												title={d.holiday ? `${d.day} ${thaiMonths[mo.m]}: ${d.holiday}` : `${thaiWeekdaysShort[d.weekday]}. ${d.day} ${thaiMonthsShort[mo.m]}`}
+											/>
+										),
+									)}
+									{mo.pieces.map((p) => {
+										const style = `grid-column: ${p.from + 1} / ${p.to + 2}; grid-row: ${p.lane + 1}; --c: ${p.e.color}`;
+										const cls = ["tl-bar", { "cont-left": p.contLeft, "cont-right": p.contRight }];
+										const body = (
+											<>
+												<span class="tl-bar-text">{p.e.title}</span>
+												<span class="tl-tip" aria-hidden="true">
+													<strong>{p.e.title}</strong>
+													<span>{p.e.range}{p.e.type ? ` · ${p.e.type}` : ""}</span>
+												</span>
+											</>
+										);
+										return p.e.link ? (
+											<a
+												class:list={cls}
+												style={style}
+												href={p.e.link}
+												target={p.e.external ? "_blank" : undefined}
+												rel={p.e.external ? "noopener noreferrer" : undefined}
+												aria-label={`${p.e.title} (${p.e.range})`}
+											>
+												{body}
+											</a>
+										) : (
+											<button type="button" class:list={cls} style={style} data-pick={p.e.id} aria-label={`${p.e.title} (${p.e.range})`}>
+												{body}
+											</button>
+										);
+									})}
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+
+				{info.calendar_note && (
+					<p class="yc-note"><strong>หมายเหตุ :</strong> {info.calendar_note}</p>
+				)}
+
+				<div class="card yc-list">
+					<h2 class="yc-list-title">
+						กิจกรรมทั้งปี {yr.y + 543}
+						<span class="yc-count">{yr.count} รายการ</span>
+					</h2>
+					{yr.count === 0 ? (
+						<p class="yc-empty">ไม่มีกิจกรรมในปีนี้</p>
+					) : (
+						<div class="yc-groups">
+							{yr.byMonth.map((g) => (
+								<div class="yc-group">
+									<h3 class="yc-group-title">{thaiMonths[g.m]} {yr.y + 543}</h3>
+									<ul>
+										{g.items.map((e) => {
+											const inner = (
+												<>
+													<span class:list={["yc-dot", { holiday: e.holiday }]} style={`--c: ${e.color}`} />
+													<span class="yc-ev-text">
+														<span class="yc-ev-title">{e.title}</span>
+														<span class="yc-ev-meta">
+															{e.range}
+															{e.holiday ? " · วันหยุด" : e.type ? ` · ${e.type}` : ""}
+														</span>
+														{e.description && <span class="yc-ev-desc">{e.description}</span>}
+													</span>
+													{e.link && <span class="yc-go" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>}
+												</>
+											);
+											return (
+												<li data-ev={e.id}>
+													{e.link ? (
+														<a class="yc-ev" href={e.link} target={e.external ? "_blank" : undefined} rel={e.external ? "noopener noreferrer" : undefined}>
+															{inner}
+														</a>
+													) : (
+														<div class="yc-ev">{inner}</div>
+													)}
+												</li>
+											);
+										})}
+									</ul>
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+			</section>
+		))}
+	</div>
+</Base>
+
+<script>
+	const root = document.querySelector<HTMLElement>("[data-year-cal]");
+	if (root) {
+		const blocks = [...root.querySelectorAll<HTMLElement>("[data-year]")];
+		const labels = [...root.querySelectorAll<HTMLElement>("[data-year-label]")];
+		const [prev, next] = [...root.querySelectorAll<HTMLButtonElement>("[data-year-step]")];
+		let current = Math.max(0, blocks.findIndex((b) => !b.hidden));
+
+		const show = (i: number) => {
+			current = Math.min(blocks.length - 1, Math.max(0, i));
+			blocks.forEach((b, n) => (b.hidden = n !== current));
+			labels.forEach((l, n) => (l.hidden = n !== current));
+			prev.disabled = current === 0;
+			next.disabled = current === blocks.length - 1;
+			// start the timeline scrolled to the current month's days on narrow screens
+			const row = blocks[current].querySelector<HTMLElement>(".tl-row.is-current .tl-day.today");
+			const scroller = blocks[current].querySelector<HTMLElement>(".tl-scroll");
+			if (row && scroller && scroller.scrollWidth > scroller.clientWidth) {
+				scroller.scrollLeft = Math.max(0, row.offsetLeft - scroller.clientWidth / 2);
+			}
+		};
+
+		// ?y=2569 (Buddhist era) opens that year; the static preview ignores query strings on the server
+		const wantedYear = Number(new URLSearchParams(location.search).get("y")) - 543;
+		const at = blocks.findIndex((b) => Number(b.dataset.year) === wantedYear);
+		show(at >= 0 ? at : current);
+
+		root.addEventListener("click", (e) => {
+			const step = (e.target as Element).closest<HTMLButtonElement>("[data-year-step]");
+			if (step) show(current + Number(step.dataset.yearStep));
+			// a bar without a link points at its entry in the list below
+			const pick = (e.target as Element).closest<HTMLElement>("[data-pick]");
+			if (pick) {
+				root.querySelectorAll(".is-picked").forEach((x) => x.classList.remove("is-picked"));
+				const li = blocks[current].querySelector<HTMLElement>(`[data-ev="${pick.dataset.pick}"]`);
+				if (li) {
+					li.classList.add("is-picked");
+					li.scrollIntoView({ behavior: "smooth", block: "center" });
+				}
+			}
+		});
+	}
+</script>
+
+<style define:vars={{ fallback: eventFallbackColor }}>
+	.yc-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px 20px;
+	}
+
+	.yc-head .section-title {
+		margin: 0;
+	}
+
+	.yc-switch {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.yc-year {
+		min-width: 90px;
+		text-align: center;
+		font-size: 1.15rem;
+		color: var(--color-primary-dark);
+	}
+
+	.yc-nav {
+		display: grid;
+		place-items: center;
+		width: 34px;
+		height: 34px;
+		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: 50%;
+		background: #fff;
+		color: var(--color-primary-dark);
+		cursor: pointer;
+	}
+
+	.yc-nav:hover:not(:disabled) {
+		border-color: var(--color-primary);
+		color: var(--color-primary);
+	}
+
+	.yc-nav:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+
+	.yc-year[hidden],
+	.yc-block[hidden] {
+		display: none;
+	}
+
+	.yc-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 16px;
+		list-style: none;
+		margin: 12px 0 16px;
+		padding: 0;
+		font-size: 0.8rem;
+		color: var(--color-text);
+	}
+
+	.yc-legend li {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.sw {
+		width: 22px;
+		height: 10px;
+		border-radius: 999px;
+		background: var(--c, var(--fallback));
+	}
+
+	.sw-holiday {
+		width: 14px;
+		height: 14px;
+		border-radius: 3px;
+		background: #dfe5e8;
+	}
+
+	.sw-today {
+		width: 14px;
+		height: 14px;
+		border-radius: 3px;
+		background: none;
+		border: 2px solid #111111;
+	}
+
+	/* ---------- timeline: months down, days across ---------- */
+	.tl-card {
+		padding: 10px 0 12px;
+	}
+
+	.tl-scroll {
+		overflow-x: auto;
+		padding: 0 14px;
+	}
+
+	.tl {
+		min-width: 940px;
+	}
+
+	.tl-row {
+		--label: 96px;
+		--lane: 14px;
+		position: relative;
+		display: grid;
+		grid-template-columns: var(--label) repeat(31, minmax(0, 1fr));
+		grid-template-rows: repeat(var(--lanes, 1), var(--lane));
+		row-gap: 3px;
+		padding: 5px 0;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.tl-headrow {
+		grid-template-rows: auto;
+		padding: 0 0 6px;
+		border-top: 0;
+	}
+
+	.tl-row.is-current {
+		background: linear-gradient(90deg, rgb(43 179 214 / 8%), transparent 60%);
+	}
+
+	.tl-label {
+		grid-column: 1;
+		grid-row: 1 / -1;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding-left: 4px;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--color-primary-dark);
+	}
+
+	.tl-headrow .tl-label {
+		font-size: 0.72rem;
+		font-weight: 500;
+		color: var(--color-muted);
+	}
+
+	.tl-label small {
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		font-size: 0.66rem;
+		font-weight: 600;
+	}
+
+	.tl-dnum {
+		grid-row: 1;
+		text-align: center;
+		font-size: 0.7rem;
+		color: var(--color-muted);
+	}
+
+	/* day cells fill every lane of the row; bars sit on top of them */
+	.tl-day {
+		grid-row: 1 / -1;
+		margin: -5px 0;
+		border-left: 1px solid rgb(0 0 0 / 4%);
+	}
+
+	.tl-day.weekend {
+		background: rgb(15 60 80 / 4%);
+	}
+
+	.tl-day.holiday {
+		background: #dfe5e8;
+	}
+
+	.tl-day.blank {
+		background: repeating-linear-gradient(135deg, transparent 0 4px, rgb(0 0 0 / 5%) 4px 5px);
+	}
+
+	.tl-day.today {
+		box-shadow: inset 0 0 0 2px #111111;
+		border-radius: 4px;
+	}
+
+	.tl-bar {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		min-width: 0;
+		margin: 0 2px;
+		padding: 0 7px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--c, var(--fallback));
+		color: #fff;
+		font: inherit;
+		font-size: 0.7rem;
+		font-weight: 600;
+		line-height: 1;
+		text-decoration: none;
+		cursor: pointer;
+		box-shadow: 0 2px 6px -2px var(--c, var(--fallback));
+		transition: filter 0.15s, transform 0.15s;
+	}
+
+	.tl-bar.cont-left {
+		margin-left: 0;
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
+	}
+
+	.tl-bar.cont-right {
+		margin-right: 0;
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+	}
+
+	.tl-bar:hover,
+	.tl-bar:focus-visible {
+		z-index: 5;
+		outline: none;
+		filter: brightness(1.08);
+		transform: translateY(-1px);
+	}
+
+	/* colour only — the name shows on hover and in the list below */
+	.tl-bar-text {
+		display: none;
+	}
+
+	.tl-tip {
+		position: absolute;
+		bottom: calc(100% + 8px);
+		left: 0;
+		z-index: 30;
+		display: none;
+		flex-direction: column;
+		gap: 2px;
+		width: max-content;
+		max-width: 280px;
+		padding: 8px 12px;
+		border-radius: 10px;
+		background: #17323d;
+		color: #fff;
+		font-size: 0.78rem;
+		font-weight: 400;
+		line-height: 1.45;
+		white-space: normal;
+		text-align: left;
+		box-shadow: 0 8px 22px rgb(0 0 0 / 25%);
+		pointer-events: none;
+	}
+
+	.tl-tip strong {
+		font-weight: 600;
+	}
+
+	.tl-tip span {
+		color: #b9d2db;
+		font-size: 0.72rem;
+	}
+
+	.tl-bar:hover .tl-tip,
+	.tl-bar:focus-visible .tl-tip {
+		display: flex;
+	}
+
+	.yc-note {
+		margin: 10px 4px 0;
+		font-size: 0.82rem;
+		color: var(--color-muted);
+	}
+
+	.yc-note strong {
+		color: #c0392b;
+		font-weight: 700;
+	}
+
+	/* ---------- the year's list under the timeline ---------- */
+	.yc-list {
+		margin-top: 18px;
+		padding: 16px 18px 18px;
+	}
+
+	.yc-list-title {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 0 0 12px;
+		font-size: 1rem;
+		color: var(--color-primary-dark);
+	}
+
+	.yc-count {
+		padding: 1px 9px;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		font-size: 0.7rem;
+		font-weight: 600;
+	}
+
+	.yc-empty {
+		margin: 0;
+		padding: 12px;
+		text-align: center;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.yc-groups {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		gap: 14px 24px;
+		align-items: start;
+	}
+
+	.yc-group-title {
+		margin: 0 0 6px;
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: var(--color-muted);
+	}
+
+	.yc-group ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 4px;
+	}
+
+	.yc-ev {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 7px 8px;
+		border: 1px solid transparent;
+		border-radius: 10px;
+		color: inherit;
+		text-decoration: none;
+		transition: background 0.15s, border-color 0.15s;
+	}
+
+	a.yc-ev:hover {
+		background: var(--color-primary-soft);
+	}
+
+	.is-picked .yc-ev {
+		border-color: var(--color-accent);
+		background: #eef9fc;
+	}
+
+	.yc-dot {
+		flex-shrink: 0;
+		width: 10px;
+		height: 10px;
+		margin-top: 5px;
+		border-radius: 50%;
+		background: var(--c, var(--fallback));
+	}
+
+	.yc-dot.holiday {
+		border-radius: 3px;
+		background: #c2cfd5;
+	}
+
+	.yc-ev-text {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.yc-ev-title {
+		font-size: 0.82rem;
+		font-weight: 600;
+		line-height: 1.4;
+	}
+
+	.yc-ev-meta {
+		font-size: 0.72rem;
+		color: var(--color-primary-dark);
+	}
+
+	.yc-ev-desc {
+		font-size: 0.72rem;
+		color: var(--color-muted);
+	}
+
+	.yc-go {
+		flex-shrink: 0;
+		margin-top: 3px;
+		color: var(--color-muted);
+	}
+
+	a.yc-ev:hover .yc-go,
+	a.yc-ev:hover .yc-ev-title {
+		color: var(--color-primary);
+	}
+
+	@media (max-width: 600px) {
+		.tl-row {
+			--label: 74px;
+		}
+
+		.tl-label {
+			font-size: 0.76rem;
+		}
+
+		.yc-groups {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+</style>

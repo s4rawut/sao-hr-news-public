@@ -1,0 +1,111 @@
+---
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import { decodeSlug, getEmDashCollection, getTaxonomyTermsWithCacheHint, getTermsForEntries } from "emdash";
+import AudienceSwitch from "../../components/AudienceSwitch.astro";
+import FormList from "../../components/FormList.astro";
+import Base from "../../layouts/Base.astro";
+import {
+	AUDIENCE_TAXONOMY,
+	FORM_TAXONOMY,
+	categoryShownFor,
+	selectedAudience,
+	withAudience,
+} from "../../utils/forms";
+
+const slug = decodeSlug(Astro.params.category);
+const [termsResult, audienceResult] = await Promise.all([
+	getTaxonomyTermsWithCacheHint(FORM_TAXONOMY),
+	getTaxonomyTermsWithCacheHint(AUDIENCE_TAXONOMY),
+]);
+const categories = termsResult.data;
+const audiences = audienceResult.data;
+const audience = selectedAudience(Astro.url, audiences);
+const term = slug ? categories.find((t) => t.slug === slug) : undefined;
+
+if (!term) {
+	return Astro.rewrite("/404");
+}
+
+const { entries: allForms, cacheHint } = await getEmDashCollection("forms", {
+	where: { [FORM_TAXONOMY]: term.slug },
+	orderBy: { published_at: "desc" },
+	limit: 500,
+});
+if (Astro.cache?.enabled) {
+	Astro.cache.set(termsResult.cacheHint);
+	Astro.cache.set(audienceResult.cacheHint);
+	Astro.cache.set(cacheHint);
+}
+
+// A form with no audience ticked is for everyone, so it shows under every audience.
+const audienceByForm = await getTermsForEntries(
+	"forms",
+	allForms.map((f) => f.data.id),
+	AUDIENCE_TAXONOMY,
+);
+const forms = allForms
+	.map((form) => ({ form, groups: audienceByForm.get(form.data.id) ?? [] }))
+	.filter(({ groups }) => !audience || groups.length === 0 || groups.some((g) => g.slug === audience));
+const selectedLabel = audiences.find((a) => a.slug === audience)?.label;
+
+const basePath = `/forms/${encodeURIComponent(term.slug)}`;
+const pageTitle = selectedLabel ? `${term.label} (${selectedLabel})` : term.label;
+---
+
+<Base title={pageTitle} description={term.description}>
+	<Breadcrumbs items={[{ label: "แบบฟอร์ม", href: withAudience("/forms", audience) }, { label: term.label }]} />
+
+	<h1 class="section-title">{term.label}</h1>
+	{term.description && <p class="desc">{term.description}</p>}
+
+	<AudienceSwitch audiences={audiences} selected={audience} basePath={basePath} />
+
+	{
+		categories.length > 1 && (
+			<div class="tabs">
+				{categories.filter((c) => c.slug === term.slug || categoryShownFor(c.slug, audience, false)).map((c) => (
+					<a href={withAudience(`/forms/${encodeURIComponent(c.slug)}`, audience)} class:list={["button", { "is-active": c.slug === term.slug }]}>
+						{c.label}
+					</a>
+				))}
+			</div>
+		)
+	}
+
+	<div class="card">
+		{
+			forms.length === 0 ? (
+				<p class="empty">ยังไม่มีแบบฟอร์มในหมวดนี้{selectedLabel && <> สำหรับ{selectedLabel}</>}</p>
+			) : (
+				<FormList forms={forms} />
+			)
+		}
+	</div>
+
+</Base>
+
+<style>
+	.desc {
+		margin: -6px 0 16px;
+		color: var(--color-muted);
+	}
+
+	.tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 16px;
+	}
+
+	.tabs .button {
+		padding: 6px 16px;
+		font-size: 0.82rem;
+	}
+
+	.empty {
+		margin: 0;
+		padding: 32px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+</style>

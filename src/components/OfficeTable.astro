@@ -1,0 +1,427 @@
+---
+import type { getEmDashCollection } from "emdash";
+import { mediaUrl } from "../utils/site-info";
+import Icon from "./Icon.astro";
+import OrgChart from "./OrgChart.astro";
+import RegionChart from "./RegionChart.astro";
+
+/**
+ * Offices of the SAO as a table (ลำดับ / ชื่อไทย / อังกฤษ / ตัวย่อ / E-mail / ผัง).
+ * "ดูผัง" opens the office's chart under its row: boxes from "กล่องในผัง" and/or the uploaded file.
+ * Rows carry data-search so a search box (here or in the region map) can filter them.
+ */
+type Office = Awaited<ReturnType<typeof getEmDashCollection<"sao_offices">>>["entries"][number];
+interface Props {
+	offices: Office[];
+	/** Number rows 1, 2, 3 … (provincial lists number only the provinces) */
+	numbered?: (o: Office) => string | number | undefined;
+	searchable?: boolean;
+	/** Provincial offices of a region, so a สตภ. chart can include their columns */
+	provincesOf?: (region?: number) => Office[];
+}
+const { offices, numbered = (_o: Office) => undefined, searchable = false, provincesOf = () => [] } = Astro.props;
+const isRegional = (o: Office) => o.data.category === "สตภ. (ภูมิภาค)" || o.data.category === "สตจ. (จังหวัด)";
+
+// "ผู้อำนวยการกลุ่ม (อำนวยการต้น) = 1" → { name, count }
+const parsePositions = (text?: string | null) =>
+	(text ?? "")
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean)
+		.map((l) => {
+			const m = l.match(/^(.*?)\s*[=:]\s*([0-9๐-๙]+)\s*$/);
+			const digits = (s: string) => Number(s.replace(/[๐-๙]/g, (d) => String("๐๑๒๓๔๕๖๗๘๙".indexOf(d))));
+			return m ? { name: m[1], count: digits(m[2]) } : { name: l, count: null };
+		});
+const chartUnits = (o: Office) =>
+	(o.data.chart_boxes ?? []).map((b, i) => ({
+		id: `${o.id}-${i}`,
+		title: b.title,
+		placement: b.placement || (i === 0 ? "หัวผัง (บนสุด)" : "กลาง (ล่าง)"),
+		show_title: b.show_title,
+		positions: parsePositions(b.positions),
+		row: b.row,
+		sort_order: i,
+	}));
+const fileOf = (o: Office) => {
+	const f = o.data.chart_file;
+	if (!f) return undefined;
+	const key = f.meta?.storageKey;
+	const isPdf = typeof key === "string" && key.toLowerCase().endsWith(".pdf");
+	return { isPdf, url: isPdf ? `/files/pdf/${encodeURIComponent(key as string)}` : mediaUrl(f) };
+};
+---
+
+<div class="ot" data-office-table>
+	{
+		searchable && (
+			<label class="ot-search">
+				<Icon name="search" size={20} />
+				<span class="sr-only">ค้นหาสำนัก</span>
+				<input type="search" placeholder="ค้นหาชื่อสำนัก ภาษาอังกฤษ ตัวย่อ หรืออีเมล" data-ot-q autocomplete="off" />
+			</label>
+		)
+	}
+	<table class="ot-table">
+		<thead>
+			<tr>
+				<th class="ot-num">ลำดับ</th>
+				<th>ชื่อภาษาไทย</th>
+				<th>ชื่อภาษาอังกฤษ</th>
+				<th>ตัวย่อ</th>
+				<th>E-mail</th>
+				<th class="ot-chart-col">ผังโครงสร้าง</th>
+			</tr>
+		</thead>
+		<tbody>
+			{offices.map((o) => {
+				const units = chartUnits(o);
+				const file = fileOf(o);
+				const columns =
+					o.data.category === "สตภ. (ภูมิภาค)"
+						? provincesOf(o.data.region).map((p) => ({ id: p.id, title: p.data.title, units: chartUnits(p) }))
+						: [];
+				const hasChart = units.length > 0 || columns.some((c) => c.units.length > 0) || !!file;
+				return (
+					<>
+						<tr
+							class:list={["ot-row", { "is-head": o.data.category === "สตภ. (ภูมิภาค)" }]}
+							id={`office-${o.id}`}
+							data-search={[o.data.title, o.data.name_en, o.data.abbr, o.data.email].join(" ")}
+						>
+							<td class="ot-num" data-label="ลำดับ">{numbered(o) ?? ""}</td>
+							<td data-label="ชื่อภาษาไทย">
+								<strong {...o.edit.title}>{o.data.title}</strong>
+							</td>
+							<td data-label="ชื่อภาษาอังกฤษ">{o.data.name_en}</td>
+							<td data-label="ตัวย่อ">{o.data.abbr}</td>
+							<td data-label="E-mail" class="ot-email">
+								{o.data.email &&
+									o.data.email.split(/\s+[–-]\s+/).map((e, i, all) => (
+										<>
+											<a href={`mailto:${e.trim()}`}>{e.trim()}</a>
+											{i < all.length - 1 && " – "}
+										</>
+									))}
+							</td>
+							<td class="ot-chart-col" data-label="ผังโครงสร้าง">
+								{/* Every office gets the button; one without a chart yet shows a note when opened. */}
+								<button type="button" class="ot-btn" data-ot-toggle={o.id} aria-expanded="false" aria-controls={`chart-${o.id}`}>
+									ดูผัง <Icon name="chevron-right" size={14} />
+								</button>
+							</td>
+						</tr>
+						{(
+							<tr class="ot-detail" id={`chart-${o.id}`} hidden>
+								<td colspan="6">
+									{!hasChart && <p class="ot-nochart">ยังไม่มีผังโครงสร้างของ{o.data.title}</p>}
+									{isRegional(o)
+										? (units.length > 0 || columns.some((c) => c.units.length > 0)) && (
+												<RegionChart title={o.data.title} units={units} provinces={columns} />
+											)
+										: units.length > 0 && <OrgChart units={units} officeName={o.data.title} />}
+									{file?.isPdf && <iframe class="ot-pdf" data-src={`${file.url}#toolbar=0&navpanes=0&view=FitH`} title={`ผังโครงสร้าง ${o.data.title}`} />}
+									{file && !file.isPdf && file.url && <img class="ot-img" src={file.url} alt={`ผังโครงสร้าง ${o.data.title}`} loading="lazy" />}
+									{file?.url && (
+										<p class="ot-open">
+											<a href={file.url} target="_blank" rel="noopener noreferrer">
+												<Icon name="arrow" size={14} /> เปิดไฟล์ผังเต็มหน้าจอ
+											</a>
+										</p>
+									)}
+								</td>
+							</tr>
+						)}
+					</>
+				);
+			})}
+		</tbody>
+	</table>
+	<p class="ot-empty" data-ot-empty hidden>ไม่พบสำนักที่ตรงกับคำค้น</p>
+</div>
+
+<script>
+	const squash = (s: string) =>
+		s
+			.toLocaleLowerCase("th")
+			.replace(/[๐-๙]/g, (d) => String("๐๑๒๓๔๕๖๗๘๙".indexOf(d)))
+			.replace(/[\s.]+/g, "");
+
+	document.querySelectorAll<HTMLElement>("[data-office-table]").forEach((root) => {
+		// Expand / collapse a chart; PDFs load only when opened.
+		root.querySelectorAll<HTMLButtonElement>("[data-ot-toggle]").forEach((btn) =>
+			btn.addEventListener("click", () => {
+				const row = root.querySelector<HTMLElement>(`#chart-${CSS.escape(btn.dataset.otToggle!)}`)!;
+				row.hidden = !row.hidden;
+				btn.setAttribute("aria-expanded", String(!row.hidden));
+				const frame = row.querySelector<HTMLIFrameElement>("iframe[data-src]");
+				if (!row.hidden && frame && !frame.src) frame.src = frame.dataset.src!;
+			}),
+		);
+
+		const input = root.querySelector<HTMLInputElement>("[data-ot-q]");
+		if (!input) return;
+		const rows = [...root.querySelectorAll<HTMLElement>(".ot-row")];
+		const empty = root.querySelector<HTMLElement>("[data-ot-empty]")!;
+		input.addEventListener("input", () => {
+			const q = squash(input.value);
+			let shown = 0;
+			for (const r of rows) {
+				const hit = !q || squash(r.dataset.search ?? "").includes(q);
+				r.hidden = !hit;
+				if (!hit) {
+					const detail = r.nextElementSibling as HTMLElement | null;
+					if (detail?.classList.contains("ot-detail")) detail.hidden = true;
+				}
+				if (hit) shown++;
+			}
+			empty.hidden = shown > 0;
+		});
+	});
+</script>
+
+<style>
+	.ot-search {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		max-width: 560px;
+		margin-bottom: 16px;
+		padding: 0 16px;
+		border: 2px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+		color: var(--color-muted);
+	}
+
+	.ot-search:focus-within {
+		border-color: var(--color-primary);
+	}
+
+	.ot-search input {
+		flex: 1;
+		min-width: 0;
+		padding: 12px 0;
+		border: 0;
+		outline: none;
+		background: transparent;
+		font: inherit;
+		color: var(--color-text);
+	}
+
+	.ot-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.92rem;
+	}
+
+	.ot-table th {
+		padding: 14px 10px;
+		border-bottom: 2px solid var(--color-primary);
+		color: var(--color-primary-dark);
+		font-weight: 700;
+		text-align: center;
+		white-space: nowrap;
+		background: var(--color-primary-soft);
+	}
+
+	.ot-table td {
+		padding: 14px 10px;
+		border-bottom: 1px solid var(--color-border);
+		text-align: center;
+		vertical-align: middle;
+		line-height: 1.5;
+	}
+
+	.ot-row:hover td {
+		background: #f7fbfc;
+	}
+
+	.ot-row.is-head td {
+		background: var(--color-primary-soft);
+	}
+
+	.ot-row strong {
+		font-weight: 600;
+	}
+
+	.ot-num {
+		width: 64px;
+	}
+
+	.ot-email a {
+		color: var(--color-primary);
+		white-space: nowrap;
+	}
+
+	.ot-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 6px 14px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.ot-btn:hover,
+	.ot-btn[aria-expanded="true"] {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	/* regional (สตภ.) rows have a tinted background, so their button starts filled to stand out */
+	.ot-row.is-head .ot-btn {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	.ot-row.is-head .ot-btn:hover,
+	.ot-row.is-head .ot-btn[aria-expanded="true"] {
+		background: var(--color-primary-dark);
+	}
+
+	.ot-btn :global(svg) {
+		transition: transform 0.2s;
+	}
+
+	.ot-btn[aria-expanded="true"] :global(svg) {
+		transform: rotate(90deg);
+	}
+
+	.ot-nochart {
+		margin: 0;
+		padding: 22px 12px;
+		text-align: center;
+		color: var(--color-muted);
+		font-size: 0.9rem;
+	}
+
+	.ot-none {
+		color: var(--color-muted);
+	}
+
+	.ot-detail > td {
+		padding: 10px 6px 28px;
+		text-align: left;
+		background: #fbfdfe;
+	}
+
+	.ot-detail :global(.org) {
+		margin-top: 16px;
+	}
+
+	.ot-pdf {
+		display: block;
+		width: 100%;
+		height: min(85vh, 1000px);
+		margin-top: 16px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+	}
+
+	.ot-img {
+		display: block;
+		max-width: 100%;
+		margin: 16px auto 0;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+	}
+
+	.ot-open {
+		margin: 10px 0 0;
+		text-align: center;
+	}
+
+	.ot-open a {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--color-primary);
+		font-weight: 600;
+	}
+
+	.ot-empty {
+		padding: 24px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+
+	/* Phones: each row becomes a card with labelled lines */
+	@media (max-width: 760px) {
+		.ot-table thead {
+			display: none;
+		}
+
+		.ot-table,
+		.ot-table tbody,
+		.ot-row,
+		.ot-row td {
+			display: block;
+			width: auto;
+		}
+
+		.ot-row {
+			margin-bottom: 12px;
+			padding: 10px 14px;
+			border: 1px solid var(--color-border);
+			border-radius: 12px;
+			background: #fff;
+		}
+
+		.ot-row[hidden],
+		.ot-detail[hidden] {
+			display: none;
+		}
+
+		.ot-row td {
+			display: grid;
+			grid-template-columns: 96px minmax(0, 1fr);
+			gap: 8px;
+			padding: 5px 0;
+			border: 0;
+			text-align: left;
+		}
+
+		.ot-email a {
+			white-space: normal;
+			word-break: break-all;
+		}
+
+		.ot-row td::before {
+			content: attr(data-label);
+			color: var(--color-muted);
+			font-size: 0.8rem;
+		}
+
+		.ot-row td.ot-num:empty {
+			display: none;
+		}
+
+		.ot-detail,
+		.ot-detail > td {
+			display: block;
+		}
+	}
+
+	/* the row a search result linked to */
+	.ot-row:global(.is-target) td {
+		background: #fff4e0;
+		animation: ot-flash 2.4s ease-out 1;
+	}
+
+	@keyframes ot-flash {
+		0%, 30% { background: #ffe2a8; }
+		100% { background: #fff4e0; }
+	}
+
+	.ot-row:global(.is-target) {
+		scroll-margin-top: 90px;
+	}
+</style>

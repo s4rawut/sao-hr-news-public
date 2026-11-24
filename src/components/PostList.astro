@@ -1,0 +1,205 @@
+---
+import { postDate, showNewBadge } from "../utils/post-date";
+import { getTaxonomyTermsWithCacheHint, getTermsForEntries, type ContentEntry } from "emdash";
+import { getSiteInfo } from "../utils/site-info";
+import { formatThaiShort } from "../utils/thai-date";
+
+/**
+ * List of คลังข้อมูล posts (newest "วันที่" first — pass them already sorted).
+ * All posts are rendered; the ข้าราชการ / ลูกจ้าง switch and the pages (PAGE_SIZE each) work in the
+ * browser, so they also work on the static preview/HTML copy. A post with no กลุ่มผู้ใช้ ticked shows
+ * under both groups, the same as the homepage box. #for-employee in the address opens ลูกจ้าง.
+ */
+interface Props {
+	heading: string;
+	posts: ContentEntry<any>[];
+	/** Show each post's category as a chip (on the all-categories list) */
+	showCategory?: boolean;
+	/** kept for older callers; paging is done in the browser now */
+	basePath?: string;
+	cursor?: string;
+	nextCursor?: string;
+}
+
+const PAGE_SIZE = 20;
+const { heading, posts, showCategory } = Astro.props;
+const ids = posts.map((p) => p.data.id as string);
+const [categories, audienceByEntry, audienceTerms] = await Promise.all([
+	showCategory ? getTermsForEntries("posts", ids, "category") : Promise.resolve(undefined),
+	getTermsForEntries("posts", ids, "post_audience"),
+	getTaxonomyTermsWithCacheHint("post_audience"),
+]);
+if (Astro.cache?.enabled) Astro.cache.set(audienceTerms.cacheHint);
+const audiences = audienceTerms.data.map((t) => ({ slug: t.slug, label: t.label }));
+const now = Date.now();
+const { new_badge_days } = await getSiteInfo();
+---
+
+<div class="pl-head">
+	<h1 class="section-title">{heading}</h1>
+	{
+		audiences.length > 0 && posts.length > 0 && (
+			<span class="pl-aud" role="group" aria-label="กลุ่มผู้ใช้" data-pl-aud>
+				{audiences.map((a, i) => (
+					<button type="button" class:list={{ "is-active": i === 0 }} data-aud={a.slug} aria-pressed={i === 0 ? "true" : "false"}>
+						{a.label}
+					</button>
+				))}
+			</span>
+		)
+	}
+</div>
+<slot />
+<div class="card" data-pl data-page-size={PAGE_SIZE}>
+	{
+		posts.length === 0 ? (
+			<p style="margin:0;padding:24px;text-align:center;color:var(--color-muted)">ยังไม่มีรายการ</p>
+		) : (
+			<>
+				<ul class="item-list">
+					{posts.map((post, i) => (
+						<li data-aud={(audienceByEntry.get(post.data.id) ?? []).map((t) => t.slug).join(" ")} hidden={i >= PAGE_SIZE}>
+							<a href={`/posts/${post.id}`}>
+								<span>
+									<span class="item-meta">
+										{categories?.get(post.data.id)?.map((t) => <span class="chip">{t.label}</span>)}
+										{postDate(post) && (
+											<time datetime={postDate(post)!.toISOString()}>{formatThaiShort(postDate(post)!)}</time>
+										)}
+									</span>
+									<span class="item-title" {...post.edit.title}>{post.data.title}</span>
+								</span>
+								{showNewBadge(post, new_badge_days, now) && <span class="badge-new">ใหม่</span>}
+							</a>
+						</li>
+					))}
+				</ul>
+				<p class="pl-empty" data-pl-empty hidden>ยังไม่มีรายการสำหรับกลุ่มนี้</p>
+			</>
+		)
+	}
+</div>
+<nav class="pager pl-pager" aria-label="เปลี่ยนหน้า" data-pl-pager hidden>
+	<button type="button" class="button" data-pl-step="-1">‹ หน้าก่อน</button>
+	<span class="pl-info" data-pl-info></span>
+	<button type="button" class="button" data-pl-step="1">หน้าถัดไป ›</button>
+</nav>
+
+<script>
+	const box = document.querySelector<HTMLElement>("[data-pl]");
+	if (box) {
+		const size = Number(box.dataset.pageSize) || 20;
+		const items = [...box.querySelectorAll<HTMLLIElement>("li[data-aud]")];
+		const empty = box.querySelector<HTMLElement>("[data-pl-empty]");
+		const pager = document.querySelector<HTMLElement>("[data-pl-pager]");
+		const info = document.querySelector<HTMLElement>("[data-pl-info]");
+		const steps = [...document.querySelectorAll<HTMLButtonElement>("[data-pl-step]")];
+		const buttons = [...document.querySelectorAll<HTMLButtonElement>("[data-pl-aud] [data-aud]")];
+		let aud = buttons[0]?.dataset.aud ?? "";
+		let page = 0;
+		const matches = () => items.filter((li) => !aud || !li.dataset.aud || li.dataset.aud.split(" ").includes(aud));
+		const render = () => {
+			const list = matches();
+			const pages = Math.max(1, Math.ceil(list.length / size));
+			page = Math.min(Math.max(0, page), pages - 1);
+			items.forEach((li) => (li.hidden = true));
+			list.slice(page * size, page * size + size).forEach((li) => (li.hidden = false));
+			if (empty) empty.hidden = list.length > 0;
+			if (pager) pager.hidden = pages <= 1;
+			if (info) info.textContent = `หน้า ${page + 1} / ${pages}`;
+			if (steps[0]) steps[0].disabled = page === 0;
+			if (steps[1]) steps[1].disabled = page >= pages - 1;
+		};
+		const setAud = (slug: string) => {
+			if (!buttons.some((b) => b.dataset.aud === slug)) return;
+			aud = slug;
+			page = 0;
+			buttons.forEach((b) => {
+				b.classList.toggle("is-active", b.dataset.aud === slug);
+				b.setAttribute("aria-pressed", String(b.dataset.aud === slug));
+			});
+			render();
+		};
+		buttons.forEach((b) => b.addEventListener("click", () => setAud(b.dataset.aud!)));
+		steps.forEach((s) =>
+			s.addEventListener("click", () => {
+				page += Number(s.dataset.plStep);
+				render();
+				box.scrollIntoView({ behavior: "smooth", block: "start" });
+			}),
+		);
+		// "#for-employee" (from the homepage box's ดูทั้งหมด) opens that group
+		const m = location.hash.match(/^#for-(.+)$/);
+		if (m) setAud(decodeURIComponent(m[1]));
+		else render();
+	}
+</script>
+
+<style>
+	.pl-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 16px;
+		margin-bottom: 14px;
+	}
+
+	.pl-head .section-title {
+		margin: 0;
+	}
+
+	.pl-aud {
+		display: inline-flex;
+		gap: 2px;
+		padding: 3px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: var(--color-surface);
+	}
+
+	.pl-aud button {
+		padding: 4px 14px;
+		border: 0;
+		border-radius: 999px;
+		background: none;
+		font: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+
+	.pl-aud button:hover {
+		color: var(--color-primary);
+	}
+
+	.pl-aud button.is-active {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	.pl-empty {
+		margin: 0;
+		padding: 24px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+
+	.pl-pager {
+		align-items: center;
+	}
+
+	.pl-pager[hidden] {
+		display: none;
+	}
+
+	.pl-pager button:disabled {
+		opacity: 0.4;
+		cursor: default;
+	}
+
+	.pl-info {
+		font-size: 0.9rem;
+		color: var(--color-muted);
+	}
+</style>

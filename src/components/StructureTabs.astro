@@ -1,0 +1,602 @@
+---
+import { getEmDashCollection } from "emdash";
+import { Image, PortableText } from "emdash/ui";
+import { mediaUrl } from "../utils/site-info";
+import Icon from "./Icon.astro";
+import OfficeTable from "./OfficeTable.astro";
+import FileAccordion from "./FileAccordion.astro";
+
+/**
+ * Tabs of the Structure page, from "แท็บหน้าโครงสร้าง". Office tables and the regional map
+ * read "ส่วนราชการ สตง." by its ประเภท; the map's region buttons sit at each สตภ.'s map position.
+ */
+const [tabsResult, officesResult] = await Promise.all([
+	getEmDashCollection("structure_tabs", { limit: 50 }),
+	getEmDashCollection("sao_offices", { limit: 1000 }),
+]);
+if (Astro.cache?.enabled) {
+	Astro.cache.set(tabsResult.cacheHint);
+	Astro.cache.set(officesResult.cacheHint);
+}
+
+const order = <T extends { data: { sort_order?: number | null } }>(list: T[]) =>
+	[...list].sort((a, b) => (a.data.sort_order ?? Infinity) - (b.data.sort_order ?? Infinity));
+const tabs = order(tabsResult.entries);
+const offices = order(officesResult.entries);
+const inCategory = (c: string) => offices.filter((o) => o.data.category === c);
+const regions = inCategory("สตภ. (ภูมิภาค)").sort((a, b) => (a.data.region ?? 0) - (b.data.region ?? 0));
+const provincesOf = (r?: number) => inCategory("สตจ. (จังหวัด)").filter((p) => p.data.region === r);
+const regionRows = (r: (typeof regions)[number]) => [r, ...provincesOf(r.data.region)];
+// Provincial offices are numbered 1, 2, 3 … under their regional office.
+const provinceNumber = (o: (typeof offices)[number]) =>
+	o.data.category === "สตจ. (จังหวัด)" ? provincesOf(o.data.region).indexOf(o) + 1 : undefined;
+const rowNumber = (list: typeof offices) => (o: (typeof offices)[number]) => list.indexOf(o) + 1;
+
+const TABLES: Record<string, typeof offices> = {
+	"ตารางส่วนราชการ: สำนักสนับสนุน": inCategory("สำนักสนับสนุน"),
+	"ตารางส่วนราชการ: สำนักตรวจสอบส่วนกลาง": inCategory("สำนักตรวจสอบส่วนกลาง"),
+	"ตารางส่วนราชการ: ทั้งหมด": [
+		...inCategory("สำนักสนับสนุน"),
+		...inCategory("สำนักตรวจสอบส่วนกลาง"),
+		...regions.flatMap(regionRows),
+	],
+};
+const MAP = "แผนที่ภาค: สตภ. และ สตจ.";
+
+// Map callouts: each province of a region (its map position in %) gets a label beside it with a
+// line to its spot — provinces left of the region button go left, the rest right, stacked so labels
+// never overlap.
+const LABEL_GAP = 2.7; // % of map height between stacked labels
+const callouts = (r: (typeof regions)[number]) => {
+	const pts = provincesOf(r.data.region)
+		.filter((p) => p.data.map_x != null && p.data.map_y != null)
+		.map((p) => ({
+			name: p.data.title.replace(/^สำนักตรวจเงินแผ่นดินจังหวัด/, ""),
+			x: Number(p.data.map_x),
+			y: Number(p.data.map_y),
+		}));
+	const pivot = Number(r.data.map_x ?? 50);
+	const out: { name: string; x: number; y: number; side: "left" | "right"; lx: number; ly: number; elbow: number }[] = [];
+	for (const side of ["left", "right"] as const) {
+		const group = pts.filter((p) => (side === "left" ? p.x < pivot : p.x >= pivot)).sort((a, b) => a.y - b.y);
+		if (!group.length) continue;
+		const lx =
+			side === "left"
+				? Math.max(14, Math.min(...group.map((p) => p.x)) - 9)
+				: Math.min(86, Math.max(...group.map((p) => p.x)) + 9);
+		// Push labels apart so they do not overlap, then centre the stack on the provinces.
+		const ys = group.map((p) => p.y);
+		for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i], ys[i - 1] + LABEL_GAP);
+		const shift = (ys[ys.length - 1] - group[group.length - 1].y) / 2;
+		group.forEach((p, i) => {
+			out.push({ ...p, side, lx, ly: Math.max(1.5, ys[i] - shift), elbow: side === "left" ? lx + 2 : lx - 2 });
+		});
+	}
+	return out;
+};
+const hasContent = (v: unknown) => Array.isArray(v) && v.length > 0;
+const pdfUrl = (file: { meta?: Record<string, unknown> } | null | undefined) => {
+	const key = file?.meta?.storageKey;
+	return typeof key === "string" && key.toLowerCase().endsWith(".pdf") ? `/files/pdf/${encodeURIComponent(key)}` : mediaUrl(file);
+};
+---
+
+{
+	tabs.length > 0 && (
+		<section class="st" data-st>
+			{tabs.map((t, i) => (
+				<div class="st-panel" id={`st-${t.id}`} hidden={i !== 0}>
+					<h2 class="st-banner" {...t.edit.title}>{t.data.title}</h2>
+					{hasContent(t.data.content) && (
+						<div class="st-intro prose">
+							<PortableText value={t.data.content} />
+						</div>
+					)}
+
+					{TABLES[t.data.display] && (
+						<OfficeTable
+							offices={TABLES[t.data.display]}
+							provincesOf={provincesOf}
+							searchable
+							numbered={t.data.display === "ตารางส่วนราชการ: ทั้งหมด" ? undefined : rowNumber(TABLES[t.data.display])}
+						/>
+					)}
+
+					{t.data.display === MAP && (
+						<div class="rm" data-region-map>
+							<div class="rm-layout">
+								<div class="rm-map">
+									{t.data.image ? (
+										<Image image={t.data.image} alt={t.data.image.alt || "แผนที่ภาค"} />
+									) : (
+										<p class="st-empty">ยังไม่ได้ใส่รูปแผนที่</p>
+									)}
+									{t.data.image &&
+										regions
+											.filter((r) => r.data.map_x != null && r.data.map_y != null)
+											.map((r) => (
+												<button
+													type="button"
+													class="rm-pin"
+													style={`left:${r.data.map_x}%;top:${r.data.map_y}%`}
+													data-region={r.data.region}
+													aria-label={`${r.data.abbr ?? r.data.title}`}
+												>
+													{r.data.region}
+												</button>
+											))}
+									{t.data.image &&
+										regions.map((r, n) => {
+											const c = callouts(r);
+											return (
+												c.length > 0 && (
+													<div class="rm-callouts" data-callouts={r.data.region} hidden={n !== 0} aria-hidden="true">
+														<svg class="rm-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+															{c.map((p) => (
+																<polyline points={`${p.x},${p.y} ${p.elbow},${p.ly} ${p.lx},${p.ly}`} vector-effect="non-scaling-stroke" />
+															))}
+														</svg>
+														{c.map((p) => (
+															<>
+																<span class="rm-dot" style={`left:${p.x}%;top:${p.y}%`} />
+																<span class:list={["rm-label", p.side]} style={`left:${p.lx}%;top:${p.ly}%`}>{p.name}</span>
+															</>
+														))}
+													</div>
+												)
+											);
+										})}
+								</div>
+								<div class="rm-chips" role="group" aria-label="เลือกภาค">
+									{regions.map((r, n) => (
+										<button type="button" class:list={{ "is-active": n === 0 }} data-region={r.data.region}>
+											{r.data.abbr ?? r.data.region}
+										</button>
+									))}
+								</div>
+								<div class="rm-side">
+									<p class="rm-hint">คลิกหมายเลขภาคบนแผนที่ หรือเลือกภาคด้านข้าง เพื่อดู สตจ. และผังโครงสร้างในภาค</p>
+									<label class="rm-search">
+										<Icon name="search" size={18} />
+										<span class="sr-only">ค้นหาจังหวัด</span>
+										<input type="search" placeholder="ค้นหาจังหวัด เช่น เชียงใหม่ หรืออีเมล" data-rm-q autocomplete="off" />
+									</label>
+									<p class="rm-result" data-rm-result aria-live="polite" />
+									{regions.map((r, n) => (
+										<div class="rm-region" data-region-panel={r.data.region} hidden={n !== 0}>
+											<h3 class="rm-title">สำนักตรวจเงินแผ่นดินจังหวัดในเขตพื้นที่ภูมิภาคที่ {r.data.region}</h3>
+											<OfficeTable offices={regionRows(r)} numbered={provinceNumber} provincesOf={provincesOf} />
+										</div>
+									))}
+								</div>
+							</div>
+						</div>
+					)}
+
+					{t.data.display === "เนื้อหา / รูปภาพ / PDF" && t.data.image && (
+						<a class="st-figure" href={mediaUrl(t.data.image)} target="_blank" rel="noopener noreferrer">
+							<Image image={t.data.image} alt={t.data.image.alt || t.data.title} />
+						</a>
+					)}
+					{t.data.attachment && (
+						<>
+							{t.data.display === "เนื้อหา / รูปภาพ / PDF" && (
+								<iframe class="st-pdf" data-src={`${pdfUrl(t.data.attachment)}#toolbar=0&navpanes=0&view=FitH`} title={t.data.attachment_text || t.data.title} />
+							)}
+							<p class="st-attachment">
+								<a href={pdfUrl(t.data.attachment)} target="_blank" rel="noopener noreferrer">
+									<Icon name="download" size={18} /> {t.data.attachment_text || "เปิดไฟล์ PDF"}
+								</a>
+							</p>
+						</>
+					)}
+					{/* Files from "ไฟล์เอกสารในหน้าเว็บ" ticked for หน้าโครงสร้าง whose "แท็บ" is this tab's name or slug */}
+					<FileAccordion pageSlug="structure" pageTitle="โครงสร้าง" hideEmpty openFirst={false} onlyTabs={[t.id, t.data.title.trim()]} />
+					{t.data.display === "เนื้อหา / รูปภาพ / PDF" && !t.data.image && !t.data.attachment && !hasContent(t.data.content) && (
+						<p class="st-empty">ยังไม่มีข้อมูลในแท็บนี้</p>
+					)}
+				</div>
+			))}
+		</section>
+	)
+}
+
+<script>
+	const squash = (s: string) =>
+		s
+			.toLocaleLowerCase("th")
+			.replace(/[๐-๙]/g, (d) => String("๐๑๒๓๔๕๖๗๘๙".indexOf(d)))
+			.replace(/[\s.]+/g, "");
+
+	document.querySelectorAll<HTMLElement>("[data-st]").forEach((root) => {
+		const panels = [...root.querySelectorAll<HTMLElement>(".st-panel")];
+		const loadPdfs = (panel: HTMLElement) =>
+			panel.querySelectorAll<HTMLIFrameElement>(":scope > iframe[data-src]").forEach((f) => {
+				if (!f.src) f.src = f.dataset.src!;
+			});
+		const show = (id: string, updateHash = true) => {
+			if (!panels.some((p) => p.id === `st-${id}`)) return false;
+			for (const panel of panels) {
+				const active = panel.id === `st-${id}`;
+				panel.hidden = !active;
+				if (active) loadPdfs(panel);
+			}
+			if (updateHash) history.replaceState(null, "", `#${id}`);
+			return true;
+		};
+		// Tabs are picked from the header submenu (page#tab), so follow the hash.
+		(root as HTMLElement & { stShow?: typeof show }).stShow = show;
+		const first = root.querySelector<HTMLElement>(".st-panel:not([hidden])");
+		if (first) loadPdfs(first);
+		const fromHash = (scroll: boolean) => {
+			const hash = decodeURIComponent(location.hash.slice(1));
+			if (hash && show(hash, false) && scroll) root.scrollIntoView({ behavior: "smooth", block: "start" });
+		};
+		fromHash(false);
+		window.addEventListener("hashchange", () => fromHash(true));
+	});
+
+	document.querySelectorAll<HTMLElement>("[data-region-map]").forEach((map) => {
+		const callouts = [...map.querySelectorAll<HTMLElement>("[data-callouts]")];
+		const panels = [...map.querySelectorAll<HTMLElement>("[data-region-panel]")];
+		const triggers = [...map.querySelectorAll<HTMLButtonElement>("[data-region]")];
+		const input = map.querySelector<HTMLInputElement>("[data-rm-q]")!;
+		const result = map.querySelector<HTMLElement>("[data-rm-result]")!;
+		let current = panels[0]?.dataset.regionPanel;
+
+		const select = (region: string, scroll = false) => {
+			current = region;
+			input.value = "";
+			for (const p of panels) {
+				p.hidden = p.dataset.regionPanel !== region;
+				p.querySelectorAll<HTMLElement>(".ot-row").forEach((r) => (r.hidden = false));
+			}
+			for (const t of triggers) t.classList.toggle("is-active", t.dataset.region === region);
+			// Province names with pointer lines for the chosen region only.
+			for (const c of callouts) c.hidden = c.dataset.callouts !== region;
+			result.textContent = "";
+			if (scroll) panels.find((p) => !p.hidden)?.scrollIntoView({ behavior: "smooth", block: "start" });
+		};
+		// Clicking a number on the map only switches region; the page stays where it is.
+		triggers.forEach((t) => t.addEventListener("click", () => select(t.dataset.region!)));
+
+		// Searching looks across every region and shows only the matching offices.
+		input.addEventListener("input", () => {
+			const q = squash(input.value);
+			if (!q) return select(current!);
+			let rows = 0;
+			let regions = 0;
+			for (const p of panels) {
+				let hits = 0;
+				p.querySelectorAll<HTMLElement>(".ot-row").forEach((r) => {
+					const hit = squash(r.dataset.search ?? "").includes(q);
+					r.hidden = !hit;
+					if (hit) hits++;
+				});
+				p.hidden = hits === 0;
+				if (hits) {
+					rows += hits;
+					regions++;
+				}
+			}
+			for (const t of triggers) t.classList.toggle("is-active", panels.some((p) => !p.hidden && p.dataset.regionPanel === t.dataset.region));
+			result.textContent = rows ? `พบ ${rows} รายการ ใน ${regions} ภาค` : "ไม่พบจังหวัดหรือสำนักที่ตรงกับคำค้น";
+		});
+	});
+
+	// A link to #office-<slug> (e.g. from search) opens the tab holding that office — and its region
+	// on the map — then expands its chart and scrolls to it.
+	const openOffice = () => {
+		const hash = decodeURIComponent(location.hash.slice(1));
+		if (!hash.startsWith("office-")) return;
+		const row = document.getElementById(hash);
+		const panel = row?.closest<HTMLElement>(".st-panel");
+		if (!row || !panel) return;
+		const root = panel.closest<HTMLElement & { stShow?: (id: string, updateHash?: boolean) => boolean }>("[data-st]");
+		root?.stShow?.(panel.id.replace(/^st-/, ""), false);
+		const region = row.closest<HTMLElement>("[data-region-panel]")?.dataset.regionPanel;
+		if (region) panel.querySelector<HTMLButtonElement>(`button[data-region="${CSS.escape(region)}"]`)?.click();
+		const toggle = row.querySelector<HTMLButtonElement>("[data-ot-toggle]");
+		if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click();
+		row.classList.add("is-target");
+		requestAnimationFrame(() => row.scrollIntoView({ behavior: "smooth", block: "start" }));
+	};
+	openOffice();
+	window.addEventListener("hashchange", openOffice);
+</script>
+
+<style>
+	.st-banner {
+		margin: 0 0 18px;
+		padding: 16px 22px;
+		border-radius: 14px;
+		background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+		color: #fff;
+		font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+	}
+
+	.st-intro {
+		margin-bottom: 16px;
+	}
+
+	.st-figure {
+		display: block;
+		margin-bottom: 16px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+
+	.st-figure :global(img) {
+		display: block;
+		width: 100%;
+		height: auto;
+		margin: 0;
+	}
+
+	.st-pdf {
+		display: block;
+		width: 100%;
+		height: min(85vh, 1100px);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+	}
+
+	.st-attachment {
+		margin: 14px 0 0;
+		text-align: center;
+	}
+
+	.st-attachment a {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 20px;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	/* A tab that has files from "ไฟล์เอกสารในหน้าเว็บ" is not empty. */
+	.st-panel:has(:global(.acc-section)) .st-empty {
+		display: none;
+	}
+
+	.st-empty {
+		padding: 28px;
+		text-align: center;
+		color: var(--color-muted);
+		border: 1px dashed var(--color-border);
+		border-radius: var(--radius);
+	}
+
+	/* Regional map */
+	.rm-layout {
+		display: grid;
+		/* big map in the middle, region buttons stacked to its right, offices of the region below */
+		grid-template-columns: minmax(0, 1fr) minmax(0, 640px) minmax(0, 1fr);
+		gap: 24px;
+		align-items: start;
+		margin-bottom: 28px;
+	}
+
+	.rm-map {
+		position: relative;
+		grid-column: 2;
+		width: 100%;
+	}
+
+	.rm-map :global(img) {
+		display: block;
+		width: 100%;
+		height: auto;
+		margin: 0;
+	}
+
+	/* Province names of the chosen region, each with a line to its spot on the map. */
+	.rm-callouts {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+
+	.rm-lines {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		overflow: visible;
+	}
+
+	.rm-lines polyline {
+		fill: none;
+		stroke: var(--color-primary-dark);
+		stroke-width: 1.2;
+	}
+
+	.rm-dot {
+		position: absolute;
+		width: 8px;
+		height: 8px;
+		transform: translate(-50%, -50%);
+		border: 2px solid #fff;
+		border-radius: 50%;
+		background: var(--color-primary-dark);
+		box-shadow: 0 0 0 1px var(--color-primary-dark);
+	}
+
+	.rm-label {
+		position: absolute;
+		padding: 1px 7px;
+		border: 1px solid var(--color-primary-dark);
+		border-radius: 6px;
+		background: #fff;
+		color: var(--color-primary-dark);
+		font-size: 0.74rem;
+		font-weight: 600;
+		line-height: 1.5;
+		white-space: nowrap;
+		box-shadow: 0 2px 6px rgb(0 0 0 / 12%);
+	}
+
+	.rm-label.left {
+		transform: translate(-100%, -50%);
+	}
+
+	.rm-label.right {
+		transform: translate(0, -50%);
+	}
+
+	.rm-pin {
+		position: absolute;
+		display: grid;
+		place-items: center;
+		width: 38px;
+		height: 38px;
+		transform: translate(-50%, -50%);
+		border: 3px solid #fff;
+		border-radius: 50%;
+		background: var(--color-primary);
+		color: #fff;
+		font: inherit;
+		font-weight: 700;
+		font-size: 0.95rem;
+		line-height: 1;
+		white-space: nowrap;
+		box-shadow: 0 4px 12px rgb(15 46 61 / 30%);
+		cursor: pointer;
+		transition: transform 0.15s, background 0.15s;
+	}
+
+	.rm-pin:hover,
+	.rm-pin.is-active {
+		transform: translate(-50%, -50%) scale(1.2);
+		background: #f0b429;
+		color: #10242e;
+		z-index: 1;
+	}
+
+	.rm-side {
+		grid-column: 1 / -1;
+		min-width: 0;
+	}
+
+	.rm-hint {
+		margin: 0 0 12px;
+		color: var(--color-muted);
+	}
+
+	.rm-chips {
+		grid-column: 3;
+		justify-self: start;
+		align-self: center;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.rm-chips button {
+		padding: 7px 14px;
+		border: 1px solid var(--color-border);
+		border-radius: 10px;
+		background: #fff;
+		font: inherit;
+		font-weight: 600;
+		font-size: 0.88rem;
+		white-space: nowrap;
+		color: var(--color-primary-dark);
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+	}
+
+	.rm-chips button:hover {
+		border-color: var(--color-primary);
+	}
+
+	.rm-chips button.is-active {
+		background: var(--color-primary);
+		border-color: var(--color-primary);
+		color: #fff;
+	}
+
+	.rm-search {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 0 0 14px;
+		padding: 0 16px;
+		border: 2px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+		color: var(--color-muted);
+	}
+
+	.rm-search:focus-within {
+		border-color: var(--color-primary);
+	}
+
+	.rm-search input {
+		flex: 1;
+		min-width: 0;
+		padding: 11px 0;
+		border: 0;
+		outline: none;
+		background: transparent;
+		font: inherit;
+		color: var(--color-text);
+	}
+
+	.rm-result {
+		min-height: 1.4em;
+		margin: 8px 0 0;
+		font-size: 0.88rem;
+		color: var(--color-muted);
+	}
+
+	.rm-region {
+		margin-bottom: 30px;
+		scroll-margin-top: 130px;
+	}
+
+	.rm-title {
+		margin: 0 0 12px;
+		padding: 12px 0;
+		border-top: 1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-border);
+		text-align: center;
+		font-size: 1.1rem;
+		color: var(--color-primary);
+	}
+
+	@media (max-width: 860px) {
+		.rm-layout {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.rm-map,
+		.rm-chips,
+		.rm-side {
+			grid-column: 1;
+		}
+
+		.rm-chips {
+			justify-self: stretch;
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+		}
+
+		.rm-pin {
+			width: 28px;
+			height: 28px;
+			border-width: 2px;
+			font-size: 0.72rem;
+			letter-spacing: -0.5px;
+		}
+
+		.rm-chips button {
+			font-size: 0.78rem;
+		}
+	}
+</style>

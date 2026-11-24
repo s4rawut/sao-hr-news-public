@@ -1,0 +1,54 @@
+---
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import { decodeSlug, getEmDashEntry } from "emdash";
+import VideoPlayer from "../../components/VideoPlayer.astro";
+import Base from "../../layouts/Base.astro";
+import { formatThaiMonth } from "../../utils/video";
+
+const slug = decodeSlug(Astro.params.slug);
+const { entry, cacheHint } = slug ? await getEmDashEntry("performance", slug) : { entry: null, cacheHint: undefined };
+if (!entry) {
+	return Astro.rewrite("/404");
+}
+if (Astro.cache?.enabled && cacheHint) Astro.cache.set(cacheHint);
+
+const month = formatThaiMonth(new Date(entry.data.report_month as unknown as string));
+---
+
+<Base title={`${entry.data.title} (${month})`} description={entry.data.description}>
+	<Breadcrumbs items={[{ label: "ผลการดำเนินการประจำเดือน", href: "/performance" }, { label: month }]} />
+	<article class="card detail">
+		<VideoPlayer title={entry.data.title} data={entry.data} />
+		<div class="text">
+			<small>{month}</small>
+			<h1 {...entry.edit.title}>{entry.data.title}</h1>
+			{entry.data.description && <p {...entry.edit.description}>{entry.data.description}</p>}
+		</div>
+	</article>
+</Base>
+
+<style>
+	.detail {
+		padding: 16px;
+	}
+
+	.text {
+		padding: 16px 8px 8px;
+	}
+
+	.text small {
+		color: var(--color-muted);
+	}
+
+	.text h1 {
+		margin: 2px 0 8px;
+		color: var(--color-primary-dark);
+		font-size: clamp(1.3rem, 2.6vw, 1.8rem);
+		line-height: 1.35;
+	}
+
+	.text p {
+		margin: 0;
+		white-space: pre-line;
+	}
+</style>

@@ -1,0 +1,27 @@
+---
+import { byPostDate } from "../../utils/post-date";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import { getEmDashCollection } from "emdash";
+import LibraryChips from "../../components/LibraryChips.astro";
+import PostList from "../../components/PostList.astro";
+import Base from "../../layouts/Base.astro";
+import { getSiteInfo } from "../../utils/site-info";
+
+// "คลังข้อมูล": every post (ประกาศ คำสั่ง ระเบียบ หลักเกณฑ์ บันทึกข้อความ), newest first.
+// sorted by the "วันที่" typed in admin (newest first), so all posts are loaded and paged here
+const [{ entries: allPosts, cacheHint }, info] = await Promise.all([
+	getEmDashCollection("posts", { orderBy: { published_at: "desc" }, limit: 1000 }),
+	getSiteInfo(),
+]);
+if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
+// paging and the ข้าราชการ / ลูกจ้าง switch are done in the browser by PostList
+const posts = byPostDate(allPosts);
+const heading = info.heading_documents;
+---
+
+<Base title={heading}>
+	<Breadcrumbs items={[{ label: heading }]} />
+	<PostList heading={heading} posts={posts} basePath="/posts" showCategory>
+		<LibraryChips current="" />
+	</PostList>
+</Base>

@@ -1,0 +1,82 @@
+---
+// Breadcrumb trail shown at the top of every page except the homepage:
+// หน้าแรก / <parents...> / <current page>. The last item is the current page (not a link).
+interface Crumb {
+	label: string;
+	href?: string;
+}
+
+interface Props {
+	items: Crumb[];
+}
+
+const crumbs: Crumb[] = [{ label: "หน้าแรก", href: "/" }, ...Astro.props.items];
+---
+
+<nav class="breadcrumbs" aria-label="ตำแหน่งหน้า">
+	<ol>
+		{
+			crumbs.map((c, i) => {
+				const last = i === crumbs.length - 1;
+				return (
+					<li>
+						{last || !c.href ? (
+							<span aria-current={last ? "page" : undefined}>{c.label}</span>
+						) : (
+							<a href={c.href}>{c.label}</a>
+						)}
+					</li>
+				);
+			})
+		}
+	</ol>
+</nav>
+
+<style>
+	.breadcrumbs {
+		margin-bottom: 14px;
+		font-size: 0.78rem;
+		color: var(--color-muted);
+	}
+
+	ol {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	li {
+		display: flex;
+		align-items: center;
+		min-width: 0;
+	}
+
+	li + li::before {
+		content: "/";
+		margin: 0 10px;
+		opacity: 0.7;
+	}
+
+	a {
+		color: var(--color-muted);
+		text-decoration: none;
+	}
+
+	a:hover,
+	a:focus-visible {
+		color: var(--color-primary);
+		text-decoration: underline;
+	}
+
+	[aria-current="page"] {
+		max-width: 60ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--color-text, inherit);
+		font-weight: 600;
+	}
+</style>

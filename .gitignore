@@ -1,0 +1,23 @@
+node_modules
+dist
+.astro
+.emdash/migrations.json
+
+# The site's content IS committed on purpose (handover to the IT centre):
+#   data.db  = all text, settings, menus, users
+#   uploads/ = all uploaded files (PDF, images, video)
+# Only SQLite's temporary journal files are left out.
+data.db-*
+
+# Secrets — never commit. Copy .env.example to .env on the server.
+.env
+.env.*
+!.env.example
+
+# Local working copies / old backups (not needed on the server)
+data/
+backup/
+.DS_Store
+
+# AI agent helper docs (not needed on the server)
+.agents/

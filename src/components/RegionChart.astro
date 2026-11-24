@@ -1,0 +1,531 @@
+---
+import type { ChartUnit } from "./OrgChart.astro";
+import Box from "./RegionBox.astro";
+
+/**
+ * Regional office chart (สตภ.), laid out like the printed chart with real connector lines:
+ * head boxes stacked on a centre trunk → the region's own groups hang off the trunk left/right
+ * → the trunk ends in a dashed bus with one column per provincial office (สตจ.). Inside a column
+ * the director box feeds a rail on the left that ticks into each group.
+ * The header total adds the region's boxes and every province's.
+ */
+interface Column {
+	id: string;
+	title: string;
+	units: ChartUnit[];
+}
+interface Props {
+	title: string;
+	units: ChartUnit[];
+	provinces?: Column[];
+}
+const { title, units, provinces = [] } = Astro.props;
+
+const sum = (u: ChartUnit) => (u.positions ?? []).reduce((n, p) => n + (p.count ?? 0), 0);
+const sumAll = (list: ChartUnit[]) => list.reduce((n, u) => n + sum(u), 0);
+const isHead = (u: ChartUnit) => u.placement === "หัวผัง (บนสุด)";
+const posName = (name: string) => (name.includes("\n") ? name : name.replace(/\s+\((?=[^()]*\)\s*$)/, "\n("));
+const total = sumAll(units) + provinces.reduce((n, p) => n + sumAll(p.units), 0);
+const heads = units.filter(isHead);
+const groups = units.filter((u) => !isHead(u));
+const columns = provinces.filter((p) => p.units.length > 0);
+// Untitled boxes (a lone position such as นักจัดการงานทั่วไป) sit right under the head, each on its own
+// row to the right of the trunk — like the office charts. Titled groups then pair up: left, right, left …
+const solo = groups.filter((u) => u.show_title === false);
+const titled = groups.filter((u) => u.show_title !== false);
+const staffRows = [
+	...solo.map((u) => [undefined, u] as const),
+	...Array.from({ length: Math.ceil(titled.length / 2) }, (_, i) => [titled[i * 2], titled[i * 2 + 1]] as const),
+];
+---
+
+<section class="rc" aria-label={`ผังโครงสร้าง ${title}`}>
+	<div class="rc-scroll">
+		<div class="rc-inner">
+			<div class="rc-title">
+				<span>{title}</span>
+				<span class="rc-num">{total}</span>
+			</div>
+
+			{
+				heads.map((u, i) => (
+					<>
+						{i > 0 && <div class="rc-v" />}
+						<div class="rc-head">
+							{(u.positions ?? []).length > 0 ? (u.positions ?? []).map((p) => <span>{posName(p.name)}</span>) : <span>{u.title}</span>}
+						</div>
+					</>
+				))
+			}
+
+			{
+				staffRows.length > 0 && (
+					<>
+						<div class="rc-v" />
+						<div class:list={["rc-staff", { "rc-staff-end": columns.length === 0 }]}>
+							{staffRows.map(([left, right], i) => (
+								<div class="rc-staff-row">
+									<div class="rc-side is-left">{left && <Box unit={left} />}</div>
+									<div class:list={["rc-trunk", { "is-last": i === staffRows.length - 1 }]} />
+									<div class="rc-side is-right">{right && <Box unit={right} />}</div>
+								</div>
+							))}
+						</div>
+					</>
+				)
+			}
+
+			{
+				columns.length > 0 && (
+					<>
+						<div class="rc-v rc-v-long" />
+						<div class="rc-cols">
+							{columns.map((c) => {
+								const director = c.units.filter(isHead);
+								const rest = c.units.filter((u) => !isHead(u));
+								return (
+									<div class="rc-col">
+										<div class="rc-col-title">
+											<span>{c.title}</span>
+											<span class="rc-num">{sumAll(c.units)}</span>
+										</div>
+										{director.map((u) => (
+											<div class="rc-line rc-director">
+												<strong class="rc-pos">{posName(u.positions?.[0]?.name ?? u.title)}</strong>
+												<span>{sum(u)}</span>
+											</div>
+										))}
+										{rest.length > 0 && (
+											<div class="rc-stack">
+												{rest.map((u) => (
+													<Box unit={u} />
+												))}
+											</div>
+										)}
+									</div>
+								);
+							})}
+						</div>
+					</>
+				)
+			}
+		</div>
+	</div>
+</section>
+
+<style>
+	.rc {
+		margin-top: 16px;
+		--line: var(--color-primary);
+		--line-w: 2px;
+	}
+
+	/* wide regions scroll sideways instead of breaking the bus line */
+	.rc-scroll {
+		overflow-x: auto;
+		padding-bottom: 6px;
+	}
+
+	.rc-inner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+		min-width: min-content;
+	}
+
+	.rc-title {
+		display: flex;
+		width: min(760px, 100%);
+		margin-bottom: 14px;
+		border-radius: 12px;
+		overflow: hidden;
+		background: var(--color-primary);
+		color: #fff;
+		font-weight: 700;
+		font-size: clamp(1rem, 2.2vw, 1.25rem);
+	}
+
+	.rc-title > span:first-child {
+		flex: 1;
+		padding: 12px 16px;
+		text-align: center;
+	}
+
+	.rc-num {
+		display: grid;
+		place-items: center;
+		min-width: 60px;
+		padding: 0 8px;
+		background: #4fd1a5;
+		color: var(--color-primary-dark);
+		font-weight: 700;
+	}
+
+	.rc-head {
+		display: flex;
+		flex-direction: column;
+		width: 340px;
+		max-width: 100%;
+		padding: 10px 16px;
+		border-radius: 10px;
+		background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+		color: #fff;
+		font-weight: 700;
+		text-align: center;
+		white-space: pre-line;
+		line-height: 1.45;
+	}
+
+	/* vertical piece of the centre trunk */
+	.rc-v {
+		width: var(--line-w);
+		height: 18px;
+		background: var(--line);
+	}
+
+	.rc-v-long {
+		height: 26px;
+	}
+
+	/* ---- region groups on both sides of the trunk ---- */
+	.rc-staff {
+		display: grid;
+		grid-template-columns: minmax(0, 300px) 52px minmax(0, 300px);
+	}
+
+	.rc-staff-row {
+		display: contents;
+	}
+
+	.rc-side {
+		display: flex;
+		align-items: flex-start;
+		padding-bottom: 14px;
+	}
+
+	.rc-side.is-left {
+		justify-content: flex-end;
+	}
+
+	.rc-side > :global(.rc-box) {
+		position: relative;
+		width: 100%;
+	}
+
+	/* horizontal arm from the box title to the trunk */
+	.rc-side > :global(.rc-box)::after {
+		content: "";
+		position: absolute;
+		top: 16px;
+		width: 27px;
+		height: var(--line-w);
+		background: var(--line);
+	}
+
+	.rc-side.is-left > :global(.rc-box)::after {
+		right: -27px;
+	}
+
+	.rc-side.is-right > :global(.rc-box)::after {
+		left: -27px;
+	}
+
+	.rc-trunk {
+		position: relative;
+	}
+
+	.rc-trunk::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: calc(50% - var(--line-w) / 2);
+		width: var(--line-w);
+		background: var(--line);
+	}
+
+	/* no provinces below: the trunk stops at the last arm */
+	.rc-staff-end .rc-trunk.is-last::before {
+		bottom: auto;
+		height: 17px;
+	}
+
+	/* ---- shared box ---- */
+	:global(.rc-box) {
+		border: 1.5px solid rgb(15 111 135 / 40%);
+		border-radius: 10px;
+		background: #fff;
+	}
+
+	.rc-line,
+	:global(.rc-box .rc-line) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 40px;
+		align-items: center;
+		font-size: 0.8rem;
+		line-height: 1.4;
+	}
+
+	.rc-line > *,
+	:global(.rc-box .rc-line > *) {
+		padding: 6px 8px;
+	}
+
+	.rc-line > :last-child,
+	:global(.rc-box .rc-line > :last-child) {
+		align-self: stretch;
+		display: grid;
+		place-items: center;
+		border-left: 1px solid rgb(15 111 135 / 20%);
+		font-weight: 700;
+		color: var(--color-primary);
+	}
+
+	:global(.rc-box .rc-line + .rc-line) {
+		border-top: 1px dashed var(--color-border);
+	}
+
+	.rc-pos,
+	:global(.rc-box .rc-pos) {
+		white-space: pre-line;
+	}
+
+	:global(.rc-box .rc-box-head) {
+		background: var(--color-primary-soft);
+		border-radius: 8px 8px 0 0;
+	}
+
+	:global(.rc-box .rc-box-head:last-child) {
+		border-radius: 8px;
+	}
+
+	:global(.rc-box .rc-box-head strong) {
+		text-align: center;
+		color: var(--color-primary-dark);
+	}
+
+	:global(.rc-box .rc-box-head > :last-child) {
+		background: #4fd1a5;
+		color: var(--color-primary-dark);
+		border-left-color: transparent;
+		border-top-right-radius: 8px;
+	}
+
+	/* ---- provincial columns hanging off a dashed bus ---- */
+	.rc-cols {
+		display: flex;
+		justify-content: center;
+		width: 100%;
+	}
+
+	.rc-col {
+		position: relative;
+		flex: 1 0 164px;
+		max-width: 240px;
+		padding: 22px 5px 0;
+	}
+
+	/* tighter rows inside the provincial columns so names wrap less */
+	.rc-col .rc-line,
+	.rc-col :global(.rc-box .rc-line) {
+		grid-template-columns: minmax(0, 1fr) 30px;
+		font-size: 0.72rem;
+	}
+
+	.rc-col .rc-line > *,
+	.rc-col :global(.rc-box .rc-line > *) {
+		padding: 5px 6px;
+	}
+
+	/* bus: each column draws its share, from its centre to its neighbours' */
+	.rc-col::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		border-top: var(--line-w) dashed var(--line);
+	}
+
+	.rc-col:first-child::before {
+		left: 50%;
+	}
+
+	.rc-col:last-child::before {
+		right: 50%;
+	}
+
+	.rc-col:only-child::before {
+		display: none;
+	}
+
+	/* drop from the bus into the column title */
+	.rc-col::after {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: calc(50% - var(--line-w) / 2);
+		height: 22px;
+		border-left: var(--line-w) dashed var(--line);
+	}
+
+	.rc-col-title {
+		display: flex;
+		border: 1.5px dashed var(--color-primary);
+		border-radius: 10px;
+		overflow: hidden;
+		background: #fff;
+		font-weight: 700;
+		font-size: 0.8rem;
+		color: var(--color-primary-dark);
+	}
+
+	.rc-col-title > span:first-child {
+		flex: 1;
+		padding: 7px 8px;
+		text-align: center;
+	}
+
+	.rc-col-title .rc-num {
+		min-width: 40px;
+	}
+
+	.rc-director {
+		position: relative;
+		margin-top: 12px;
+		border: 1.5px solid var(--color-primary);
+		border-radius: 10px;
+		background: var(--color-primary-soft);
+	}
+
+	/* title → director */
+	.rc-director::before {
+		content: "";
+		position: absolute;
+		top: -13.5px;
+		left: calc(50% - var(--line-w) / 2);
+		width: var(--line-w);
+		height: 12px;
+		background: var(--line);
+		padding: 0;
+	}
+
+	/* groups hang off a rail that runs down from the director, like the printed chart */
+	.rc-stack {
+		display: grid;
+		gap: 10px;
+		padding: 10px 0 0 16px;
+	}
+
+	.rc-stack > :global(.rc-box) {
+		position: relative;
+	}
+
+	/* rail piece above each box, down to its tick (the last one stops at its tick) */
+	.rc-stack > :global(.rc-box)::before {
+		content: "";
+		position: absolute;
+		top: -11.5px;
+		bottom: -11.5px;
+		left: -11px;
+		width: var(--line-w);
+		background: var(--line);
+	}
+
+	.rc-stack > :global(.rc-box:last-child)::before {
+		bottom: auto;
+		height: 27.5px;
+	}
+
+	/* tick into the box */
+	.rc-stack > :global(.rc-box)::after {
+		content: "";
+		position: absolute;
+		top: 14px;
+		left: -11px;
+		width: 9.5px;
+		height: var(--line-w);
+		background: var(--line);
+	}
+
+	@media (max-width: 640px) {
+		.rc-staff {
+			grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+		}
+
+		.rc-side > :global(.rc-box)::after {
+			width: 15px;
+		}
+
+		.rc-side.is-left > :global(.rc-box)::after {
+			right: -15px;
+		}
+
+		.rc-side.is-right > :global(.rc-box)::after {
+			left: -15px;
+		}
+
+		.rc-inner {
+			min-width: 0;
+		}
+
+		.rc-head {
+			width: 100%;
+		}
+
+		/* phones: provinces stack, each hangs off a dashed rail from the trunk */
+		.rc-cols {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.rc-col {
+			max-width: none;
+			padding: 14px 0 0 22px;
+		}
+
+		.rc-col::before,
+		.rc-col:first-child::before,
+		.rc-col:last-child::before {
+			top: 0;
+			bottom: 0;
+			left: 0;
+			right: auto;
+			border-top: 0;
+			border-left: var(--line-w) dashed var(--line);
+		}
+
+		.rc-col:last-child::before {
+			bottom: auto;
+			height: 30px;
+		}
+
+		.rc-col:only-child::before {
+			display: block;
+		}
+
+		.rc-col::after {
+			top: 30px;
+			left: 0;
+			width: 22px;
+			height: 0;
+			border-left: 0;
+			border-top: var(--line-w) dashed var(--line);
+		}
+
+		/* dashed arm from the trunk across to the provinces' rail */
+		.rc-cols {
+			position: relative;
+		}
+
+		.rc-cols::before {
+			content: "";
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: calc(50% + var(--line-w) / 2);
+			border-top: var(--line-w) dashed var(--line);
+		}
+	}
+</style>

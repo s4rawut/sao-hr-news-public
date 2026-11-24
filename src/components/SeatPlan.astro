@@ -1,0 +1,212 @@
+---
+
+/**
+ * Seating plan drawn from the "กล่องในผัง" rows of an office group. Each box sits on a simple
+ * grid (column / row / width / height), so staff can rearrange desks from the admin without a
+ * drawing tool. Wide plans scroll sideways on phones instead of squeezing the desks.
+ */
+interface SeatBox {
+	label?: string | null;
+	phone?: string | null;
+	color?: string | null;
+	custom_color?: string | null;
+	col: number;
+	row: number;
+	width?: number | null;
+	height?: number | null;
+	vertical?: boolean | null;
+	text_size?: string | null;
+	style?: string | null;
+}
+interface Props {
+	boxes: SeatBox[];
+	columns?: number | null;
+	rows?: number | null;
+	title: string;
+}
+const { boxes, columns, rows, title } = Astro.props;
+
+// Box colours: [background, text]
+const COLORS: Record<string, [string, string]> = {
+	เทา: ["#cdd4dc", "#1d2a33"],
+	ฟ้า: ["#c4e6f2", "#0b4152"],
+	เขียวมิ้นต์: ["#c3eedf", "#0d4a3a"],
+	เขียว: ["#a8dcbc", "#0f3d24"],
+	เหลือง: ["#fbe9a6", "#4a3a06"],
+	ส้ม: ["#fbd2a4", "#4d2a05"],
+	ชมพู: ["#f7c9d8", "#4d1427"],
+	ม่วง: ["#dcd1f4", "#2e1d5c"],
+	"น้ำเงิน (ตัวอักษรขาว)": ["#0f6f87", "#ffffff"],
+	ขาว: ["#ffffff", "#1d2a33"],
+	ไม่มีสี: ["transparent", "#1d2a33"],
+};
+const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+// Dark text on light colours, white text on dark ones.
+const textFor = (hex: string) => {
+	const full = hex.length === 4 ? `#${[...hex.slice(1)].map((c) => c + c).join("")}` : hex;
+	const [r, g, b] = [1, 3, 5].map((i) => parseInt(full.slice(i, i + 2), 16));
+	return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#1d2a33" : "#ffffff";
+};
+
+const span = (n: number | null | undefined) => Math.max(1, Math.round(n ?? 1));
+const items = boxes
+	.filter((b) => b.col >= 1 && b.row >= 1)
+	.map((b) => {
+		const isFrame = b.style === "กรอบห้อง (เส้นขอบ)";
+		const custom = b.custom_color?.trim() ?? "";
+		const [bg, fg] = HEX.test(custom) ? [custom, textFor(custom)] : (COLORS[b.color ?? ""] ?? COLORS["เทา"]);
+		return {
+			...b,
+			isFrame,
+			w: span(b.width),
+			h: span(b.height),
+			style: isFrame
+				? `grid-column:${b.col} / span ${span(b.width)};grid-row:${b.row} / span ${span(b.height)};`
+				: `grid-column:${b.col} / span ${span(b.width)};grid-row:${b.row} / span ${span(b.height)};--box-bg:${bg};--box-fg:${fg};`,
+		};
+	});
+
+// The grid grows to fit boxes placed past the configured size.
+const colCount = Math.max(columns ?? 12, ...items.map((b) => b.col + b.w - 1));
+const rowCount = Math.max(rows ?? 11, ...items.map((b) => b.row + b.h - 1));
+---
+
+<p class="plan-hint">เลื่อนซ้าย–ขวาเพื่อดูผังทั้งหมด</p>
+<div class="plan-scroll">
+	<div
+		class="plan"
+		style={`grid-template-columns:repeat(${colCount}, minmax(0, 1fr));grid-template-rows:repeat(${rowCount}, var(--row-h));min-width:${Math.max(colCount * 62, 320)}px;`}
+		role="img"
+		aria-label={`ผังที่นั่ง ${title}`}
+	>
+		{
+			items.map((b) =>
+				b.isFrame ? (
+					<span class="plan-frame" style={b.style} aria-hidden="true" />
+				) : (
+					<span
+						class:list={[
+							"plan-box",
+							{ vertical: b.vertical, large: b.text_size === "ใหญ่", small: b.text_size === "เล็ก" },
+						]}
+						style={b.style}
+						title={[b.label, b.phone].filter(Boolean).join(" — ") || undefined}
+					>
+						<span class="plan-text">
+							{b.label && <span class="plan-label">{b.label}</span>}
+							{b.phone && <span class="plan-phone">{b.phone}</span>}
+						</span>
+					</span>
+				),
+			)
+		}
+	</div>
+</div>
+
+<style>
+	.plan-scroll {
+		overflow-x: auto;
+		padding: 10px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: #fff;
+	}
+
+	.plan {
+		--row-h: 46px;
+		position: relative;
+		display: grid;
+		gap: 8px;
+		padding: 10px;
+	}
+
+	.plan-frame {
+		/* room outline drawn just outside its boxes */
+		margin: -9px;
+		border: 3px solid #1d2a33;
+		border-radius: 4px;
+		pointer-events: none;
+		z-index: 0;
+	}
+
+	.plan-box {
+		position: relative;
+		z-index: 1;
+		display: grid;
+		place-items: center;
+		min-width: 0;
+		padding: 4px;
+		border-radius: 4px;
+		background: var(--box-bg);
+		color: var(--box-fg);
+		text-align: center;
+		overflow: hidden;
+		transition: transform 0.15s, box-shadow 0.15s;
+	}
+
+	.plan-box[title]:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 6px 14px rgb(15 46 61 / 18%);
+		z-index: 2;
+	}
+
+	.plan-text {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		line-height: 1.3;
+	}
+
+	.plan-label {
+		font-weight: 700;
+		font-size: 0.9rem;
+		white-space: pre-line;
+	}
+
+	.plan-phone {
+		font-size: 0.88rem;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.5px;
+	}
+
+	.plan-box.large .plan-label {
+		font-size: clamp(1.2rem, 2.2vw, 1.9rem);
+	}
+
+	.plan-box.large .plan-phone {
+		font-size: clamp(1.1rem, 2vw, 1.7rem);
+	}
+
+	.plan-box.small .plan-label,
+	.plan-box.small .plan-phone {
+		font-size: 0.74rem;
+	}
+
+	/* reads bottom-to-top like a printed floor plan */
+	.plan-box.vertical .plan-text {
+		flex-direction: row;
+		gap: 0.5em;
+		writing-mode: vertical-rl;
+		transform: rotate(180deg);
+	}
+
+
+	.plan-hint {
+		display: none;
+		margin: 0 0 6px;
+		font-size: 0.78rem;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 760px) {
+		.plan-hint {
+			display: block;
+		}
+
+		.plan {
+			--row-h: 40px;
+			gap: 6px;
+		}
+	}
+</style>

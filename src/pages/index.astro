@@ -1,0 +1,2158 @@
+---
+import { siteLink } from "../utils/site-link";
+import {
+	getEmDashCollection,
+	getSiteSettings,
+	getTaxonomyTermsWithCacheHint,
+	getTermsForEntries,
+} from "emdash";
+import { Image } from "emdash/ui";
+import Icon from "../components/Icon.astro";
+import RecruitLevels from "../components/RecruitLevels.astro";
+import VideoPlayer from "../components/VideoPlayer.astro";
+import EntryBanner from "../components/EntryBanner.astro";
+import WelcomePopup from "../components/WelcomePopup.astro";
+import Base from "../layouts/Base.astro";
+import { resolveStarterSiteIdentity } from "../utils/site-identity";
+import { getRecruitData } from "../utils/recruit";
+import { byPostDate, postDate, showNewBadge } from "../utils/post-date";
+import { dayNo, layoutBars, toCalEvent, weekdayOf } from "../utils/event-days";
+import { getEventTypes } from "../utils/event-types";
+import { getSiteInfo, mediaUrl, quickLinkIcons } from "../utils/site-info";
+import { formatThaiMonth, resolveVideo } from "../utils/video";
+import {
+	adminDateTime,
+	bangkokParts,
+	formatThaiAgo,
+	formatThaiCompact,
+	formatThaiShort,
+	thaiMonths,
+	thaiMonthsShort,
+	thaiWeekdaysShort,
+} from "../utils/thai-date";
+
+const now = new Date();
+
+const [info, settings, termsResult, audienceResult] = await Promise.all([
+	getSiteInfo(),
+	getSiteSettings(),
+	getTaxonomyTermsWithCacheHint("category"),
+	// "กลุ่มผู้ใช้คลังข้อมูล" (ข้าราชการ / ลูกจ้าง): the switch beside the คลังข้อมูล heading
+	getTaxonomyTermsWithCacheHint("post_audience"),
+]);
+const postAudiences = audienceResult.data.map((t) => ({ slug: t.slug, label: t.label }));
+
+// "คลังข้อมูล" = every post; its chips are the categories under Categories (ประกาศ / คำสั่ง /
+// ระเบียบ / หลักเกณฑ์ / บันทึกข้อความ), all shown even when empty.
+const documentCategories = termsResult.data.map((t) => ({ slug: t.slug, label: t.label }));
+const docsSeeAll = "/posts";
+// the chip selected when the page opens: คำสั่ง (slug "order"), or the first one if it is gone
+const docsDefault = documentCategories.some((c) => c.slug === "order") ? "order" : documentCategories[0]?.slug;
+
+const sortByOrder = <T extends { data: { sort_order?: number } }>(items: T[]) =>
+	[...items].sort((a, b) => (a.data.sort_order ?? Infinity) - (b.data.sort_order ?? Infinity));
+
+const [quickResult, recruitData, newsResult, docsResult, eventsResult, perfResult] = await Promise.all([
+	getEmDashCollection("quick_links", { limit: 50 }),
+	getRecruitData(),
+	// Every post in คลังข้อมูล: pinned ones ("ปักหมุดที่ข่าวประชาสัมพันธ์") also show in the news tab.
+	getEmDashCollection("posts", {
+		orderBy: { published_at: "desc" },
+		limit: 300,
+	}),
+	getEmDashCollection("posts", {
+		orderBy: { published_at: "desc" },
+		limit: 300,
+	}),
+	getEmDashCollection("events", { orderBy: { event_date: "asc" }, limit: 500 }),
+	getEmDashCollection("performance", { orderBy: { report_month: "desc" }, limit: 4 }),
+]);
+if (Astro.cache?.enabled) {
+	Astro.cache.set(info.cacheHint);
+	Astro.cache.set(termsResult.cacheHint);
+	Astro.cache.set(audienceResult.cacheHint);
+	for (const hint of recruitData.cacheHints) Astro.cache.set(hint);
+	for (const r of [quickResult, newsResult, docsResult, eventsResult, perfResult]) {
+		if (r.cacheHint) Astro.cache.set(r.cacheHint);
+	}
+}
+
+const { siteTitle, siteTagline } = resolveStarterSiteIdentity(settings);
+// Hero text is optional: empty fields show the image alone, without the dark overlay.
+const heroTitle = info.hero_title.trim();
+const heroSubtitle = info.hero_subtitle.trim();
+const heroHasText = !!(heroTitle || heroSubtitle);
+// A banner without overlay text keeps its own proportions, so the words drawn into the image are
+// never cropped (on phones the box gets shorter instead of cutting the sides).
+const heroRatio =
+	info.hero_image?.width && info.hero_image?.height ? `${info.hero_image.width} / ${info.hero_image.height}` : "2.9 / 1";
+const quickLinks = sortByOrder(quickResult.entries);
+
+// Latest monthly performance video is featured; the next few are listed beside it.
+const [latestPerf, ...olderPerf] = perfResult.entries;
+const perfMonth = (e: (typeof perfResult.entries)[number]) =>
+	formatThaiMonth(new Date(e.data.report_month as unknown as string));
+const perfThumb = (e: (typeof perfResult.entries)[number]) => {
+	const v = resolveVideo(e.data);
+	return mediaUrl(e.data.poster) ?? (v?.kind === "embed" ? v.thumbnail : undefined);
+};
+const news = byPostDate(newsResult.entries);
+
+const categoryByEntry = await getTermsForEntries(
+	"posts",
+	docsResult.entries.map((p) => p.data.id),
+	"category",
+);
+// a post with no กลุ่มผู้ใช้ ticked is for everyone, so it shows under both ข้าราชการ and ลูกจ้าง
+const audienceByEntry = await getTermsForEntries(
+	"posts",
+	docsResult.entries.map((p) => p.data.id),
+	"post_audience",
+);
+const docs = byPostDate(docsResult.entries).map((post) => {
+	const term = (categoryByEntry.get(post.data.id) ?? [])[0];
+	const audiences = (audienceByEntry.get(post.data.id) ?? []).map((t) => t.slug);
+	return { post, category: term, audiences };
+});
+
+// News tab: items pinned with "ปักหมุดที่ข่าวประชาสัมพันธ์ หน้าแรก: ลำดับที่", from คลังข้อมูล posts and
+// from "ไฟล์เอกสารในหน้าเว็บ" — 1 = big card, 2–5 = the cards beside it. Nothing pinned = an empty note.
+const isPinned = (o: unknown) => typeof o === "number" && o > 0;
+const pinnedPosts = news.filter((p) => isPinned(p.data.featured_order));
+const pinnedFilesResult = await getEmDashCollection("infographics", { limit: 500 });
+if (Astro.cache?.enabled && pinnedFilesResult.cacheHint) Astro.cache.set(pinnedFilesResult.cacheHint);
+const pinnedFiles = pinnedFilesResult.entries.filter((g) => isPinned(g.data.featured_order));
+const newsTerms = await getTermsForEntries(
+	"posts",
+	pinnedPosts.map((p) => p.data.id),
+	"category",
+);
+type NewsItem = {
+	key: string;
+	title: string;
+	href: string;
+	image?: (typeof news)[number]["data"]["featured_image"];
+	date?: Date;
+	label?: string;
+	edit?: Record<string, unknown>;
+	isNew: boolean;
+	order: number;
+};
+const newsItems: NewsItem[] = [
+	...pinnedPosts.map((p) => ({
+		key: p.data.id,
+		title: p.data.title,
+		href: `/posts/${p.id}`,
+		image: p.data.featured_image,
+		date: postDate(p),
+		// the post's category in คลังข้อมูล (ประกาศ / คำสั่ง …), if it has one
+		label: (newsTerms.get(p.data.id) ?? [])[0]?.label,
+		edit: p.edit.title as Record<string, unknown>,
+		isNew: showNewBadge(p, info.new_badge_days, now.getTime()),
+		order: p.data.featured_order as number,
+	})),
+	...pinnedFiles.map((g) => ({
+		key: g.data.id,
+		title: g.data.title,
+		// a PDF link opens in the site's preview window
+		href: mediaUrl(g.data.file) ?? "/",
+		image: g.data.featured_image as NewsItem["image"],
+		date: postDate(g),
+		label: "เอกสาร",
+		isNew: showNewBadge(g, info.new_badge_days, now.getTime()),
+		order: g.data.featured_order as number,
+	})),
+].sort((a, b) => a.order - b.order || (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));
+const headline = newsItems.slice(0, 5);
+const newsGridCount = Math.min(4, Math.max(0, headline.length - 1));
+const newsSlides = headline.slice(0, 1);
+const newsGrid = headline.slice(1, 1 + newsGridCount);
+
+
+
+// Calendar: every month from a year back to a year ahead (stretched to cover all events) is
+// rendered; the arrows switch months in the browser. ?m=YYYY-MM picks the month shown first.
+const today = bangkokParts(now);
+const monthParam = Astro.url.searchParams.get("m");
+let calYear = today.year;
+let calMonth = today.month;
+if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+	const [y, m] = monthParam.split("-").map(Number);
+	if (m >= 1 && m <= 12) {
+		calYear = y;
+		calMonth = m - 1;
+	}
+}
+const monthKey = (y: number, m: number) => {
+	const d = new Date(Date.UTC(y, m, 1));
+	return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+const initialMonth = monthKey(calYear, calMonth);
+
+const allEvents = eventsResult.entries.map((e) => ({ entry: e, date: adminDateTime(e.data.event_date) }));
+const monthIndex = (y: number, m: number) => y * 12 + m;
+const eventIdx = allEvents.map(({ date }) => {
+	const p = bangkokParts(date);
+	return monthIndex(p.year, p.month);
+});
+const baseIdx = monthIndex(today.year, today.month);
+const fromIdx = Math.max(baseIdx - 36, Math.min(baseIdx - 12, monthIndex(calYear, calMonth), ...eventIdx));
+const toIdx = Math.min(baseIdx + 36, Math.max(baseIdx + 12, monthIndex(calYear, calMonth), ...eventIdx));
+
+// Each month is drawn in week rows, the same way as the yearly calendar: day numbers on top and
+// every event as a bar in its "ประเภทกิจกรรม" colour running from "วันที่" to "ถึงวันที่".
+const eventTypes = await getEventTypes();
+if (Astro.cache?.enabled && eventTypes.cacheHint) Astro.cache.set(eventTypes.cacheHint);
+const calEvents = eventsResult.entries.map((e) => toCalEvent(e, eventTypes.colorOf));
+const todayNo = dayNo(today);
+const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
+	const idx = fromIdx + n;
+	const y = Math.floor(idx / 12);
+	const m = idx % 12;
+	const firstNo = dayNo({ year: y, month: m, day: 1 });
+	const lastNo = dayNo({ year: y, month: m + 1, day: 0 });
+	const gridStart = firstNo - weekdayOf(firstNo);
+	const weekCount = Math.ceil((lastNo - gridStart + 1) / 7);
+	const weeks = Array.from({ length: weekCount }, (_, w) => {
+		const ws = gridStart + w * 7;
+		const cells = Array.from({ length: 7 }, (_, i) => {
+			const no = ws + i;
+			const touching = calEvents.filter((e) => e.start <= no && e.end >= no);
+			return {
+				no,
+				day: new Date(no * 86_400_000).getUTCDate(),
+				col: i,
+				outside: no < firstNo || no > lastNo,
+				weekend: i === 0 || i === 6,
+				today: no === todayNo,
+				holiday: touching.filter((e) => e.holiday).map((e) => e.title).join(", "),
+				titles: touching.map((e) => e.title),
+			};
+		});
+		const { pieces, lanes } = layoutBars(calEvents, ws, ws + 6);
+		return { cells, pieces, lanes: Math.max(1, lanes) };
+	});
+	return { key: monthKey(y, m), y, m, weeks, first: n === 0, last: idx === toIdx };
+});
+---
+
+<Base title={siteTitle} description={siteTagline} fullWidth>
+	<section class:list={["hero", { "has-text": heroHasText }]} aria-label={heroHasText ? undefined : siteTitle} style={`--hero-ratio: ${heroRatio}`}>
+		{
+			info.hero_image ? (
+				<div class="hero-bg" {...info.entry?.edit.hero_image}>
+					<Image image={info.hero_image} alt={info.hero_image.alt || ""} loading="eager" />
+				</div>
+			) : (
+				<div class="hero-bg hero-bg-default" />
+			)
+		}
+		<div class="container hero-text">
+			{heroTitle ? <h1>{heroTitle}</h1> : <h1 class="sr-only">{siteTitle}</h1>}
+			{heroSubtitle && <p>{heroSubtitle}</p>}
+		</div>
+	</section>
+
+	<div class="container">
+		{
+			quickLinks.length > 0 && (
+				<nav
+					class="quick-links card"
+					aria-label="ระบบงานที่ใช้บ่อย"
+					style={`--ql-cols: ${Math.min(quickLinks.length, 6)}`}
+				>
+					{quickLinks.map((link) => (
+						<a
+							href={siteLink(link.data.url)}
+							target={link.data.new_tab ? "_blank" : undefined}
+							rel={link.data.new_tab ? "noopener noreferrer" : undefined}
+						>
+							<span class="ql-icon">
+								{link.data.icon_image ? (
+									<Image image={link.data.icon_image} alt="" width={28} height={28} />
+								) : (
+									<Icon name={quickLinkIcons[link.data.icon ?? ""] ?? "link"} />
+								)}							</span>
+							<span class="ql-label" {...link.edit.title}>{link.data.title}</span>
+						</a>
+					))}
+				</nav>
+			)
+		}
+
+		{/* Two columns, three rows: performance | calendar, news | events of the month, recruitment | คลังข้อมูล */}
+		<div class="home-grid">
+			{latestPerf && (
+				<section class="hg-cell hg-perf" id="performance">
+					<h2 class="section-title">
+						{info.heading_performance_tab}
+						<a href="/performance" class="see-all">ดูทั้งหมด</a>
+					</h2>
+						<div class:list={["perf card", { single: olderPerf.length === 0 }]}>
+							<div class="perf-main">
+								<VideoPlayer title={latestPerf.data.title} data={latestPerf.data} />
+								<div class="perf-text">
+									<h3 {...latestPerf.edit.title}>{latestPerf.data.title}</h3>
+									{latestPerf.data.description && (
+										<p {...latestPerf.edit.description}>{latestPerf.data.description}</p>
+									)}
+								</div>
+							</div>
+							{olderPerf.length > 0 && (
+								<aside class="perf-list">
+									<h3>เดือนก่อนหน้า</h3>
+									<ul>
+										{olderPerf.map((e) => {
+											const thumb = perfThumb(e);
+											return (
+												<li>
+													<a href={`/performance/${encodeURIComponent(e.id)}`}>
+														<span class="perf-thumb" style={thumb ? `background-image:url("${thumb}")` : undefined}>
+															<Icon name="play" size={16} />
+														</span>
+														<span>
+															<small>{perfMonth(e)}</small>
+															<strong>{e.data.title}</strong>
+														</span>
+													</a>
+												</li>
+											);
+										})}
+									</ul>
+								</aside>
+							)}
+						</div>
+				</section>
+			)}
+
+			<section class="hg-cell hg-cal" id="calendar">
+				<h2 class="section-title">
+					{info.heading_calendar}
+					<small>วันนี้ {formatThaiCompact(now)}</small>
+					{info.show_year_calendar && <a href="/calendar" class="see-all">ดูทั้งหมด</a>}
+				</h2>
+				<div data-calendar>
+					{calMonths.map((cm) => (
+							<div class="card calendar" data-cal-month={cm.key} hidden={cm.key !== initialMonth}>
+								<div class="cal-head">
+									<button type="button" class="cal-nav" data-cal-step="-1" aria-label="เดือนก่อนหน้า" disabled={cm.first}>
+										<Icon name="chevron-left" size={14} />
+									</button>
+									<strong>{thaiMonths[cm.m]} {cm.y + 543}</strong>
+									<button type="button" class="cal-nav" data-cal-step="1" aria-label="เดือนถัดไป" disabled={cm.last}>
+										<Icon name="chevron-right" size={14} />
+									</button>
+								</div>
+								<div class="mc-dows">
+									{thaiWeekdaysShort.map((d) => <span>{d}</span>)}
+								</div>
+								<div class="mc-weeks">
+									{cm.weeks.map((wk) => (
+										<div class="mc-week" style={`--lanes: ${wk.lanes}`}>
+											{wk.cells.map((c) =>
+												c.titles.length > 0 ? (
+													<button
+														type="button"
+														class:list={["mc-day", "has-ev", { outside: c.outside, weekend: c.weekend, today: c.today, holiday: !!c.holiday }]}
+														style={`grid-column: ${c.col + 1}`}
+														data-cal-day={c.no}
+														aria-label={`${c.day}: ${c.titles.join(", ")}`}
+													>
+														<span class="mc-num">{c.day}</span>
+														{c.holiday && (
+															<span class:list={["cal-tip", { "tip-left": c.col <= 1, "tip-right": c.col >= 5 }]} aria-hidden="true">
+																<span class="cal-tip-item holiday">{c.holiday}</span>
+															</span>
+														)}
+													</button>
+												) : (
+													<span class:list={["mc-day", { outside: c.outside, weekend: c.weekend, today: c.today }]} style={`grid-column: ${c.col + 1}`}>
+														<span class="mc-num">{c.day}</span>
+													</span>
+												),
+											)}
+											{wk.pieces.map((p) => {
+												const style = `grid-column: ${p.from} / ${p.to + 1}; grid-row: ${p.lane + 2}; --c: ${p.e.color}`;
+												const cls = ["mc-bar", { "cont-left": p.contLeft, "cont-right": p.contRight, "tip-right": p.from >= 5 }];
+												const body = (
+													<>
+														<span class="mc-bar-text">{p.e.title}</span>
+														<span class="mc-tip" aria-hidden="true">
+															<strong>{p.e.title}</strong>
+															<span>{p.e.range}{p.e.type ? ` · ${p.e.type}` : ""}</span>
+														</span>
+													</>
+												);
+												return p.e.link ? (
+													<a class:list={cls} style={style} href={p.e.link} target={p.e.external ? "_blank" : undefined} rel={p.e.external ? "noopener noreferrer" : undefined} aria-label={`${p.e.title} (${p.e.range})`}>
+														{body}
+													</a>
+												) : (
+													<button type="button" class:list={cls} style={style} data-cal-day={Math.max(p.e.start, wk.cells[0].no)} aria-label={`${p.e.title} (${p.e.range})`}>
+														{body}
+													</button>
+												);
+											})}
+										</div>
+									))}
+								</div>
+							</div>
+					))}
+				</div>
+				<div class="card events cal-detail" data-cal-detail aria-live="polite">
+					<p class="cal-hint" data-cal-hint>
+						<Icon name="calendar" size={16} /> คลิกวันที่มีสี เพื่อดูรายละเอียดกิจกรรม
+					</p>
+					<h3 class="events-title" data-cal-detail-title hidden></h3>
+					<ul>
+						{calEvents.map((e) => {
+							const inner = (
+								<>
+									<span class:list={["event-date", { holiday: e.holiday }]} style={e.holiday ? undefined : `--c: ${e.color}`}>
+										<strong>{new Date(e.start * 86_400_000).getUTCDate()}</strong>
+										<small>{thaiMonthsShort[new Date(e.start * 86_400_000).getUTCMonth()]}</small>
+									</span>
+									<div>
+										<h3>{e.title}</h3>
+										<p class="ev-range">{e.range}{e.holiday ? " · วันหยุด" : e.type ? ` · ${e.type}` : ""}</p>
+										{e.description && <p>{e.description}</p>}
+									</div>
+									{e.link && <span class="event-go" aria-hidden="true"><Icon name="chevron-right" size={16} /></span>}
+								</>
+							);
+							return (
+								<li data-ev-start={e.start} data-ev-end={e.end} hidden>
+									{e.link ? (
+										<a class="event-item is-link" href={e.link} target={e.external ? "_blank" : undefined} rel={e.external ? "noopener noreferrer" : undefined}>
+											{inner}
+										</a>
+									) : (
+										<div class="event-item">{inner}</div>
+									)}
+								</li>
+							);
+						})}
+					</ul>
+				</div>
+			</section>
+
+			<section class="hg-cell hg-news" id="news">
+				<h2 class="section-title">
+					{info.heading_news}
+					<a href="/posts" class="see-all">ดูทั้งหมด</a>
+				</h2>
+				{
+					headline.length === 0 ? (
+						<div class="card">
+							<p class="empty">ยังไม่มีข่าวที่ปักหมุดไว้ — ปักหมุดได้ที่เรื่องในคลังข้อมูล หรือไฟล์เอกสารในหน้าเว็บ (ช่อง "ปักหมุดที่ข่าวประชาสัมพันธ์")</p>
+						</div>
+					) : (
+						<div>
+							<div class:list={["news-top", { "no-grid": newsGrid.length === 0 }]} data-news-all>
+								<div class="news-feature card" data-slider>
+									{newsSlides.map((item, i) => (
+										<a href={item.href} class="feature-slide" data-slide hidden={i !== 0}>
+											<span class="news-img feature-img">
+												{item.image ? (
+													<Image image={item.image} alt={item.image.alt || ""} loading={i === 0 ? "eager" : "lazy"} />
+												) : (
+													<span class="news-ph" aria-hidden="true"><Icon name="office" size={64} /></span>
+												)}
+											</span>
+											<span class="feature-body">
+												<span class="feature-title" {...(item.edit ?? {})}>{item.title}</span>
+											</span>
+										</a>
+									))}
+									<div class="feature-meta">
+										{newsSlides.map((item, i) => (
+											<span class="news-meta" data-slide-meta hidden={i !== 0}>
+												{item.label && <span class="news-chip">{item.label}</span>}
+												{item.date && (
+													<time datetime={item.date.toISOString()}>
+														<Icon name="clock" size={14} /> {formatThaiAgo(item.date, now)}
+													</time>
+												)}
+												{item.isNew && <span class="badge-new">ใหม่</span>}
+											</span>
+										))}
+										{newsSlides.length > 1 && (
+											<span class="feature-pager" role="group" aria-label="เลือกข่าวเด่น">
+												{newsSlides.map((_, i) => (
+													<button type="button" data-goto={i} class:list={{ "is-active": i === 0 }} aria-label={`ข่าวเด่นที่ ${i + 1}`}>
+														{i + 1}
+													</button>
+												))}
+											</span>
+										)}
+									</div>
+								</div>
+
+								{newsGrid.length > 0 && (
+									<ul class="news-grid">
+										{newsGrid.map((item) => (
+											<li>
+												<a href={item.href} class="news-card">
+													<span class="news-img">
+														{item.image ? (
+															<Image image={item.image} alt={item.image.alt || ""} />
+														) : (
+															<span class="news-ph" aria-hidden="true"><Icon name="office" size={36} /></span>
+														)}
+													</span>
+													<span class="news-card-title" {...(item.edit ?? {})}>{item.title}</span>
+													<span class="news-meta">
+														{item.date && (
+															<time datetime={item.date.toISOString()}>
+																<Icon name="clock" size={13} /> {formatThaiAgo(item.date, now)}
+															</time>
+														)}
+														{item.label && <span class="news-cat">{item.label}</span>}
+														{item.isNew && <span class="badge-new">ใหม่</span>}
+													</span>
+												</a>
+											</li>
+										))}
+									</ul>
+								)}
+							</div>
+
+						</div>
+					)
+				}
+			</section>
+
+
+			<section class="hg-cell hg-docs docs" id="docs" data-limit={info.documents_limit} data-see-all={docsSeeAll}>
+				<h2 class="section-title">
+					{info.heading_documents}
+					{postAudiences.length > 0 && (
+						<span class="docs-aud" role="group" aria-label="กลุ่มผู้ใช้">
+							{postAudiences.map((a, i) => (
+								<button type="button" class:list={{ "is-active": i === 0 }} data-aud={a.slug} aria-pressed={i === 0 ? "true" : "false"}>
+									{a.label}
+								</button>
+							))}
+						</span>
+					)}
+					<a href={docsSeeAll} class="see-all" data-docs-see-all>ดูทั้งหมด</a>
+				</h2>
+					<div class="tabs" role="tablist" aria-label="หมวดหมู่คลังข้อมูล" hidden={documentCategories.length === 0}>
+						{
+							documentCategories.map((c) => (
+								<button type="button" class:list={["button", { "is-active": c.slug === docsDefault }]} data-filter={c.slug} data-default={c.slug === docsDefault ? "" : undefined} role="tab" aria-selected={c.slug === docsDefault ? "true" : "false"}>
+									{c.label}
+								</button>
+							))
+						}
+					</div>
+					<div class="card docs-card">
+						<ul class="item-list" data-docs-list>
+							{
+								docs.map(({ post, category, audiences }) => (
+									<li data-cat={category?.slug ?? ""} data-aud={audiences.join(" ")}>
+										<a href={`/posts/${post.id}`}>
+											<span>
+												<span class="item-meta">
+													{category && <span class="chip">{category.label}</span>}
+													{postDate(post) && (
+														<time datetime={postDate(post)!.toISOString()}>
+															{formatThaiShort(postDate(post)!)}
+														</time>
+													)}
+												</span>
+												<span class="item-title" {...post.edit.title}>{post.data.title}</span>
+											</span>
+											{showNewBadge(post, info.new_badge_days, now.getTime()) && <span class="badge-new">ใหม่</span>}
+										</a>
+									</li>
+								))
+							}
+						</ul>
+						<p class="empty" data-empty hidden>ยังไม่มีรายการในหมวดนี้</p>
+						<nav class="docs-pager" data-docs-pager aria-label="หน้าคลังข้อมูล" hidden>
+							<button type="button" class="pg-btn" data-pg-step="-1" aria-label="หน้าก่อนหน้า"><Icon name="chevron-left" size={14} /></button>
+							<span class="pg-info" data-pg-info></span>
+							<button type="button" class="pg-btn" data-pg-step="1" aria-label="หน้าถัดไป"><Icon name="chevron-right" size={14} /></button>
+						</nav>
+					</div>
+			</section>
+
+			{recruitData.levels.length > 0 && (
+				<section class="hg-cell hg-recruit" id="recruit">
+					<h2 class="section-title">
+						{info.heading_recruitments}
+						<a href="/recruitments" class="see-all">ดูทั้งหมด</a>
+					</h2>
+					<RecruitLevels types={recruitData.types} stageOf={recruitData.stageOf} />
+				</section>
+			)}
+
+		</div>
+	</div>
+
+	<EntryBanner />
+	{info.show_welcome_popup && <WelcomePopup />}
+
+	<aside class="line-friend" data-line-friend aria-label="เพิ่มเพื่อน LINE SAO HR">
+		<button type="button" class="line-friend-close" data-line-friend-close aria-label="ปิด">×</button>
+		<img
+			src="/images/line-friend.webp"
+			alt="มาเป็นเพื่อนกัน — สแกน QR code เพื่อเพิ่มเพื่อน LINE SAO HR"
+			width="360"
+			height="360"
+			loading="lazy"
+			decoding="async"
+		/>
+	</aside>
+</Base>
+
+<script>
+	document.querySelector("[data-line-friend-close]")?.addEventListener("click", () => {
+		document.querySelector("[data-line-friend]")?.remove();
+	});
+</script>
+
+<style>
+	.line-friend {
+		position: fixed;
+		right: 16px;
+		bottom: 16px;
+		z-index: 50;
+		width: 200px;
+		filter: drop-shadow(0 6px 16px rgb(0 0 0 / 0.18));
+	}
+
+	.line-friend img {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	.line-friend-close {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		width: 26px;
+		height: 26px;
+		border: 0;
+		border-radius: 50%;
+		background: rgb(0 0 0 / 0.55);
+		color: #fff;
+		font-size: 18px;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.line-friend-close:hover,
+	.line-friend-close:focus-visible {
+		background: rgb(0 0 0 / 0.8);
+	}
+
+	@media (max-width: 640px) {
+		.line-friend {
+			width: 130px;
+			right: 8px;
+			bottom: 8px;
+		}
+	}
+</style>
+
+<script>
+	// Calendar arrows: switch months in the browser (no reload). ?m=YYYY-MM in the address opens that
+	// month (the static preview ignores query strings on the server, so this also reads it here).
+	const cal = document.querySelector<HTMLElement>("[data-calendar]");
+	if (cal) {
+		const months = [...cal.querySelectorAll<HTMLElement>("[data-cal-month]")];
+		// the "รายละเอียดกิจกรรม" box next to the news follows the same month
+		// clicking a coloured day lists its events in the box under the calendar
+		const detail = cal.parentElement!.querySelector<HTMLElement>("[data-cal-detail]");
+		const hint = detail?.querySelector<HTMLElement>("[data-cal-hint]");
+		const detailTitle = detail?.querySelector<HTMLElement>("[data-cal-detail-title]");
+		const evItems = [...(detail?.querySelectorAll<HTMLElement>("[data-ev-start]") ?? [])];
+		const thaiMonthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+		const selectDay = (key: string | null) => {
+			cal.querySelectorAll<HTMLElement>(".mc-day[data-cal-day]").forEach((d) => {
+				d.classList.toggle("is-selected", d.dataset.calDay === key);
+				d.setAttribute("aria-pressed", String(d.dataset.calDay === key));
+			});
+			const no = key === null ? NaN : Number(key);
+			evItems.forEach((li) => (li.hidden = !(Number(li.dataset.evStart) <= no && no <= Number(li.dataset.evEnd))));
+			if (hint) hint.hidden = !!key;
+			if (detailTitle) {
+				detailTitle.hidden = !key;
+				if (key) {
+					const d = new Date(no * 86_400_000);
+					detailTitle.textContent = `กิจกรรมวันที่ ${d.getUTCDate()} ${thaiMonthNames[d.getUTCMonth()]} ${d.getUTCFullYear() + 543}`;
+				}
+			}
+		};
+		let current = Math.max(0, months.findIndex((m) => !m.hidden));
+		const showMonth = (i: number) => {
+			current = Math.min(months.length - 1, Math.max(0, i));
+			months.forEach((m, n) => (m.hidden = n !== current));
+			// open today's events if today is in this month and has any
+			const todayBtn = months[current].querySelector<HTMLElement>(".mc-day.today[data-cal-day]");
+			selectDay(todayBtn?.dataset.calDay ?? null);
+		};
+		showMonth(current);
+		const wanted = new URLSearchParams(location.search).get("m");
+		const at = wanted ? months.findIndex((m) => m.dataset.calMonth === wanted) : -1;
+		if (at >= 0) showMonth(at);
+		cal.addEventListener("click", (e) => {
+			const btn = (e.target as Element).closest<HTMLButtonElement>("[data-cal-step]");
+			if (btn) showMonth(current + Number(btn.dataset.calStep));
+			const day = (e.target as Element).closest<HTMLElement>("[data-cal-day]");
+			if (day) selectDay(day.classList.contains("is-selected") && day.classList.contains("mc-day") ? null : day.dataset.calDay!);
+		});
+	}
+
+	// Featured news: numbered pager, auto-advances unless hovered/focused or reduced motion is on.
+	const slider = document.querySelector<HTMLElement>("[data-slider]");
+	if (slider) {
+		const slides = [...slider.querySelectorAll<HTMLElement>("[data-slide]")];
+		const metas = [...slider.querySelectorAll<HTMLElement>("[data-slide-meta]")];
+		const pager = [...slider.querySelectorAll<HTMLButtonElement>("[data-goto]")];
+		let current = 0;
+		const go = (i: number) => {
+			current = (i + slides.length) % slides.length;
+			slides.forEach((el, n) => (el.hidden = n !== current));
+			metas.forEach((el, n) => (el.hidden = n !== current));
+			pager.forEach((b, n) => {
+				b.classList.toggle("is-active", n === current);
+				b.setAttribute("aria-current", String(n === current));
+			});
+		};
+		pager.forEach((b) => b.addEventListener("click", () => go(Number(b.dataset.goto))));
+		let paused = false;
+		slider.addEventListener("mouseenter", () => (paused = true));
+		slider.addEventListener("mouseleave", () => (paused = false));
+		slider.addEventListener("focusin", () => (paused = true));
+		slider.addEventListener("focusout", () => (paused = false));
+		if (slides.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			setInterval(() => {
+				if (!paused && !slider.closest<HTMLElement>("[hidden]")) go(current + 1);
+			}, 6000);
+		}
+	}
+
+	// คลังข้อมูล: category chips (no "ทั้งหมด" – that is the ดูทั้งหมด link) and pages sized to the box,
+	// which is as tall as the news beside it. In one column a page is "documents_limit" items.
+	const section = document.querySelector<HTMLElement>(".docs");
+	if (section) {
+		const PAGE_ITEMS = Number(section.dataset.limit) || 8;
+		const oneColumn = matchMedia("(max-width: 1000px)");
+		const buttons = [...section.querySelectorAll<HTMLButtonElement>("[data-filter]")];
+		const items = [...section.querySelectorAll<HTMLLIElement>("li[data-cat]")];
+		const list = section.querySelector<HTMLElement>("[data-docs-list]")!;
+		const empty = section.querySelector<HTMLElement>("[data-empty]");
+		const pager = section.querySelector<HTMLElement>("[data-docs-pager]")!;
+		const info = section.querySelector<HTMLElement>("[data-pg-info]")!;
+		const [prev, next] = [...pager.querySelectorAll<HTMLButtonElement>("[data-pg-step]")];
+		let filter = (buttons.find((b) => b.hasAttribute("data-default")) ?? buttons[0])?.dataset.filter ?? "";
+		// ข้าราชการ / ลูกจ้าง switch beside the heading; posts with no group ticked show under both
+		const audButtons = [...section.querySelectorAll<HTMLButtonElement>("[data-aud]")].filter((b) => b.tagName === "BUTTON");
+		let aud = audButtons[0]?.dataset.aud ?? "";
+		const forAud = (li: HTMLElement) => !aud || !li.dataset.aud || li.dataset.aud.split(" ").includes(aud);
+		let pages: HTMLLIElement[][] = [];
+		let page = 0;
+
+		const showPage = (n: number) => {
+			page = Math.min(Math.max(0, n), Math.max(0, pages.length - 1));
+			items.forEach((li) => {
+				li.hidden = true;
+				li.classList.remove("pg-first");
+			});
+			(pages[page] ?? []).forEach((li, i) => {
+				li.hidden = false;
+				li.classList.toggle("pg-first", i === 0);
+			});
+			pager.hidden = pages.length <= 1;
+			info.textContent = `หน้า ${page + 1} / ${pages.length}`;
+			prev.disabled = page === 0;
+			next.disabled = page >= pages.length - 1;
+		};
+
+		const layout = (keepPage = false) => {
+			const matched = items.filter((li) => li.dataset.cat === filter && forAud(li));
+			if (empty) empty.hidden = matched.length > 0;
+			pages = [];
+			if (oneColumn.matches) {
+				for (let i = 0; i < matched.length; i += PAGE_ITEMS) pages.push(matched.slice(i, i + PAGE_ITEMS));
+			} else {
+				// measure every matching item, then fill each page up to the list's height
+				pager.hidden = false;
+				items.forEach((li) => {
+					li.hidden = !matched.includes(li);
+					li.classList.remove("pg-first");
+				});
+				const cs = getComputedStyle(list);
+				const room = list.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+				let cur: HTMLLIElement[] = [];
+				let used = 0;
+				for (const li of matched) {
+					const h = li.offsetHeight;
+					if (cur.length && used + h > room) {
+						pages.push(cur);
+						cur = [];
+						used = 0;
+					}
+					cur.push(li);
+					used += h;
+				}
+				if (cur.length) pages.push(cur);
+			}
+			showPage(keepPage ? page : 0);
+		};
+
+		buttons.forEach((b) =>
+			b.addEventListener("click", () => {
+				filter = b.dataset.filter ?? "";
+				buttons.forEach((x) => {
+					x.classList.toggle("is-active", x === b);
+					x.setAttribute("aria-selected", String(x === b));
+				});
+				layout();
+			}),
+		);
+		audButtons.forEach((b) =>
+			b.addEventListener("click", () => {
+				aud = b.dataset.aud ?? "";
+				// ดูทั้งหมด opens the full list on the same group
+				const seeAll = section.querySelector<HTMLAnchorElement>("[data-docs-see-all]");
+				if (seeAll) seeAll.href = b === audButtons[0] ? "/posts" : `/posts#for-${encodeURIComponent(aud)}`;
+				audButtons.forEach((x) => {
+					x.classList.toggle("is-active", x === b);
+					x.setAttribute("aria-pressed", String(x === b));
+				});
+				layout();
+			}),
+		);
+		prev.addEventListener("click", () => showPage(page - 1));
+		next.addEventListener("click", () => showPage(page + 1));
+		layout();
+		// the news column settles once images load / the window changes size
+		let t = 0;
+		const relayout = () => {
+			clearTimeout(t);
+			t = window.setTimeout(() => layout(true), 120);
+		};
+		addEventListener("resize", relayout);
+		addEventListener("load", relayout);
+		new ResizeObserver(relayout).observe(list);
+	}
+</script>
+
+<style>
+	.hero {
+		position: relative;
+		min-height: clamp(260px, 34vw, 400px);
+		display: flex;
+		align-items: center;
+		overflow: hidden;
+		color: #fff;
+	}
+
+	.hero:not(.has-text) {
+		min-height: 0;
+		width: 100%;
+		aspect-ratio: var(--hero-ratio, 2.9 / 1);
+		/* always full width; on very wide screens the image is cropped a little top/bottom instead of shrinking */
+		max-height: 720px;
+	}
+
+	.hero.has-text::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		background: linear-gradient(90deg, rgb(10 40 55 / 62%) 0%, rgb(10 40 55 / 30%) 45%, rgb(10 40 55 / 0%) 70%);
+		pointer-events: none;
+	}
+
+	.hero-bg {
+		position: absolute;
+		inset: 0;
+	}
+
+	.hero-bg :global(img) {
+		width: 100%;
+		height: 100%;
+		max-width: none;
+		object-fit: cover;
+	}
+
+	.hero-bg-default {
+		background: url("/images/hero.jpg") center / cover no-repeat;
+	}
+
+	.hero-text {
+		position: relative;
+		z-index: 2;
+	}
+
+	.hero h1 {
+		margin: 0;
+		font-size: clamp(1.8rem, 4.2vw, 2.9rem);
+		font-weight: 700;
+		line-height: 1.25;
+		text-shadow: 0 2px 16px rgb(0 0 0 / 30%);
+	}
+
+	.hero p {
+		margin: 6px 0 0;
+		font-size: clamp(0.9rem, 1.5vw, 1.05rem);
+		text-shadow: 0 1px 8px rgb(0 0 0 / 35%);
+	}
+
+	/* sits below the banner (not over it), with breathing room on both sides */
+	.quick-links {
+		position: relative;
+		z-index: 2;
+		margin-top: 32px;
+		display: grid;
+		grid-template-columns: repeat(var(--ql-cols, 6), 1fr);
+		padding: 18px 12px;
+		box-shadow: var(--shadow-lg);
+	}
+
+	.quick-links a {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 4px 12px;
+		border-radius: 14px;
+		transition: background 0.25s, transform 0.25s;
+	}
+
+	.quick-links a:hover,
+	.quick-links a:focus-visible {
+		background: linear-gradient(180deg, var(--color-primary-soft), transparent);
+		transform: translateY(-4px);
+	}
+
+	.ql-icon {
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: 52px;
+		height: 52px;
+		border-radius: 50%;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		transition: background 0.25s, color 0.25s, box-shadow 0.25s, transform 0.25s;
+	}
+
+	.ql-icon::after {
+		content: "";
+		position: absolute;
+		inset: -5px;
+		border-radius: 50%;
+		border: 2px solid var(--color-accent);
+		opacity: 0;
+		transform: scale(0.85);
+		transition: opacity 0.25s, transform 0.25s;
+	}
+
+	.quick-links a:hover .ql-icon,
+	.quick-links a:focus-visible .ql-icon {
+		background: var(--color-primary);
+		color: #fff;
+		box-shadow: 0 8px 20px rgb(15 111 135 / 35%);
+		transform: scale(1.06);
+	}
+
+	.quick-links a:hover .ql-icon::after,
+	.quick-links a:focus-visible .ql-icon::after {
+		opacity: 0.5;
+		transform: scale(1);
+	}
+
+	.ql-icon :global(img) {
+		width: 28px;
+		height: 28px;
+		object-fit: contain;
+	}
+
+	.ql-arrow {
+		position: absolute;
+		top: -4px;
+		right: -10px;
+		color: var(--color-muted);
+		transition: transform 0.25s, color 0.25s;
+	}
+
+	.quick-links a:hover .ql-arrow {
+		color: var(--color-primary);
+		transform: translate(3px, -3px);
+	}
+
+	.ql-label {
+		font-size: 0.85rem;
+		font-weight: 500;
+		text-align: center;
+		transition: color 0.25s;
+	}
+
+	.quick-links a:hover .ql-label {
+		color: var(--color-primary);
+		font-weight: 600;
+	}
+
+	/* Monthly performance video */
+	.perf {
+		display: grid;
+		grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
+		gap: 20px;
+		padding: 16px;
+	}
+
+	.perf.single {
+		grid-template-columns: 1fr;
+	}
+
+	.perf-text h3 {
+		margin: 14px 4px 4px;
+		font-size: 1.1rem;
+		color: var(--color-primary-dark);
+	}
+
+	.perf-text p {
+		margin: 0 4px 4px;
+		color: var(--color-muted);
+		font-size: 0.9rem;
+	}
+
+	.perf-list h3 {
+		margin: 4px 0 10px;
+		font-size: 0.95rem;
+		color: var(--color-muted);
+	}
+
+	.perf-list ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 10px;
+	}
+
+	.perf-list a {
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		padding: 8px;
+		border-radius: 12px;
+		transition: background 0.2s;
+	}
+
+	.perf-list a:hover {
+		background: var(--color-primary-soft);
+	}
+
+	.perf-thumb {
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		width: 112px;
+		aspect-ratio: 16 / 9;
+		border-radius: 8px;
+		background: linear-gradient(135deg, #0f6f87, #0f2e3d) center / cover no-repeat;
+		color: #fff;
+	}
+
+	.perf-list small {
+		display: block;
+		color: var(--color-muted);
+		font-size: 0.75rem;
+	}
+
+	.perf-list strong {
+		font-size: 0.88rem;
+		line-height: 1.4;
+	}
+
+	@media (max-width: 860px) {
+		.perf {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.see-all {
+		margin-left: auto;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--color-muted);
+	}
+
+	.see-all:hover {
+		color: var(--color-primary);
+	}
+
+	/* News tab: featured slider + card grid */
+	.news-top {
+		display: grid;
+		grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+		gap: 24px;
+		align-items: stretch;
+	}
+
+	.news-top.no-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.news-img {
+		position: relative;
+		display: block;
+		aspect-ratio: 16 / 9;
+		overflow: hidden;
+		border-radius: 12px;
+		background: var(--color-primary-soft);
+	}
+
+	.news-img :global(img) {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		transition: transform 0.4s ease;
+	}
+
+	.news-ph {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		color: rgb(255 255 255 / 85%);
+		background:
+			radial-gradient(circle at 20% 15%, rgb(79 209 165 / 45%), transparent 45%),
+			radial-gradient(circle at 85% 90%, rgb(255 255 255 / 12%), transparent 40%),
+			linear-gradient(135deg, var(--color-primary), #0f2e3d);
+	}
+
+	.news-feature {
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		padding: 0;
+	}
+
+	.feature-slide {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.feature-slide[hidden] {
+		display: none;
+	}
+
+	.feature-slide:not([hidden]) {
+		animation: news-fade 0.45s ease;
+	}
+
+	@keyframes news-fade {
+		from {
+			opacity: 0;
+		}
+	}
+
+	.feature-img {
+		border-radius: 0;
+		border-bottom: 5px solid #4fd1a5;
+	}
+
+	.feature-slide:hover .news-img :global(img),
+	.news-card:hover .news-img :global(img) {
+		transform: scale(1.05);
+	}
+
+	.feature-body {
+		flex: 1;
+		padding: 22px 26px 6px;
+	}
+
+	.feature-title {
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		font-size: clamp(1.2rem, 2vw, 1.6rem);
+		font-weight: 700;
+		line-height: 1.45;
+		color: var(--color-text);
+		transition: color 0.2s;
+	}
+
+	.feature-slide:hover .feature-title {
+		color: var(--color-primary);
+	}
+
+	.feature-meta {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 10px 26px 22px;
+	}
+
+	.news-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 12px;
+		font-size: 0.8rem;
+		color: var(--color-muted);
+	}
+
+	.news-meta[hidden] {
+		display: none;
+	}
+
+	.news-meta time {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.news-chip {
+		padding: 5px 14px;
+		border-radius: 999px;
+		background: var(--color-primary);
+		color: #fff;
+		font-weight: 600;
+	}
+
+	.news-cat {
+		color: var(--color-primary);
+		font-weight: 600;
+	}
+
+	.feature-pager {
+		display: flex;
+		gap: 2px;
+		margin-left: auto;
+	}
+
+	.feature-pager button {
+		min-width: 30px;
+		height: 30px;
+		border: 0;
+		border-radius: 50%;
+		background: transparent;
+		font: inherit;
+		font-weight: 600;
+		color: var(--color-text);
+		cursor: pointer;
+		transition: background 0.2s, color 0.2s;
+	}
+
+	.feature-pager button:hover {
+		background: var(--color-primary-soft);
+	}
+
+	.feature-pager button.is-active {
+		color: #fff;
+		background: var(--color-primary);
+	}
+
+	.news-grid {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 22px 20px;
+		align-content: start;
+	}
+
+	.news-grid li {
+		margin: 0;
+	}
+
+	.news-card {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		height: 100%;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.news-card-title {
+		flex: 1;
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		font-size: 0.95rem;
+		line-height: 1.55;
+		color: var(--color-text);
+		transition: color 0.2s;
+	}
+
+	.news-card:hover .news-card-title {
+		color: var(--color-primary);
+	}
+
+	.news-rest {
+		margin-top: 24px;
+	}
+
+	@media (max-width: 1000px) {
+		.news-top {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (max-width: 520px) {
+		/* Compact rows on phones: small picture left, title right */
+		.news-grid {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 14px;
+		}
+
+		.news-card {
+			display: grid;
+			grid-template-columns: 120px minmax(0, 1fr);
+			grid-template-rows: 1fr auto;
+			gap: 4px 12px;
+		}
+
+		.news-card .news-img {
+			grid-row: 1 / 3;
+			align-self: start;
+			border-radius: 10px;
+		}
+
+		.news-card .news-ph :global(svg) {
+			width: 26px;
+			height: 26px;
+		}
+
+		.news-card-title {
+			font-size: 0.9rem;
+			line-height: 1.45;
+		}
+
+		.news-card .news-meta {
+			font-size: 0.72rem;
+		}
+
+		.feature-body {
+			padding: 18px 18px 4px;
+		}
+
+		.feature-meta {
+			padding: 8px 18px 18px;
+			flex-wrap: wrap;
+		}
+	}
+
+	.tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 12px;
+	}
+
+	.tabs .button {
+		padding: 5px 14px;
+		font-size: 0.8rem;
+	}
+
+	.empty {
+		margin: 0;
+		padding: 24px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+
+	/* Calendar */
+	.calendar-grid > *,
+	.quick-links > * {
+		min-width: 0;
+	}
+
+	.calendar-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 16px;
+		align-items: start;
+	}
+
+	.calendar {
+		display: flex;
+		flex-direction: column;
+		padding: 16px 18px 20px;
+	}
+
+	/* days spread out to fill the box when it is stretched to the video's height */
+	.calendar .cal-days {
+		flex: 1;
+		align-content: space-evenly;
+	}
+
+	.cal-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 8px;
+		color: var(--color-primary-dark);
+	}
+
+	.cal-nav {
+		display: grid;
+		place-items: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: 50%;
+		background: #fff;
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+
+	.cal-nav:hover:not(:disabled) {
+		color: var(--color-primary);
+		border-color: var(--color-primary);
+	}
+
+	.cal-nav:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+
+	.cal-row[hidden] {
+		display: none;
+	}
+
+	.cal-days {
+		display: grid;
+		grid-template-columns: repeat(7, 1fr);
+		gap: 6px 4px;
+		text-align: center;
+	}
+
+	.cal-dow {
+		font-size: 0.75rem;
+		color: var(--color-muted);
+		padding-bottom: 4px;
+	}
+
+	.cal-day {
+		display: grid;
+		place-items: center;
+		height: 36px;
+		border-radius: 8px;
+		border: 2px solid transparent;
+		font-size: 0.9rem;
+		font-weight: 500;
+	}
+
+	.cal-day.weekend {
+		color: var(--color-muted);
+	}
+
+	.cal-day.outside {
+		color: #c2cfd5;
+		font-weight: 400;
+	}
+
+	.cal-day.holiday {
+		background: #e3e8eb;
+		color: var(--color-text);
+	}
+
+	.cal-day.event {
+		background: var(--color-accent);
+		color: #fff;
+	}
+
+	.cal-day.today {
+		border-color: #111111;
+	}
+
+	.events {
+		margin-top: 24px;
+		padding: 18px 20px 20px;
+	}
+
+	.events-title {
+		margin: 0 0 12px;
+		font-size: 1rem;
+		color: var(--color-primary-dark);
+	}
+
+	.events ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 12px;
+	}
+
+	.events li {
+		margin: 0;
+	}
+
+	.event-item {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		height: 100%;
+		padding: 12px 14px;
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		background: #fbfdfe;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.event-item > div {
+		flex: 1;
+		min-width: 0;
+	}
+
+	a.event-item {
+		transition: border-color 0.15s, background 0.15s, transform 0.15s;
+	}
+
+	a.event-item:hover,
+	a.event-item:focus-visible {
+		border-color: var(--color-primary);
+		background: var(--color-primary-soft);
+		transform: translateX(2px);
+	}
+
+	a.event-item:hover h3 {
+		color: var(--color-primary);
+	}
+
+	.event-go {
+		flex-shrink: 0;
+		color: var(--color-muted);
+	}
+
+	a.event-item:hover .event-go {
+		color: var(--color-primary);
+	}
+
+	.event-date {
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 48px;
+		border-radius: 10px;
+		background: var(--c, var(--color-accent));
+		color: #fff;
+		line-height: 1.1;
+		box-shadow: 0 4px 10px -4px var(--c, var(--color-accent));
+	}
+
+	.event-date strong {
+		font-size: 1.15rem;
+	}
+
+	.event-date small {
+		font-size: 0.65rem;
+		color: rgba(255, 255, 255, 0.85);
+	}
+
+	.event-date.holiday {
+		background: #e3e8eb;
+		color: var(--color-text);
+		box-shadow: none;
+	}
+
+	.event-date.holiday small {
+		color: var(--color-muted);
+	}
+
+	.events h3 {
+		margin: 0;
+		font-size: 0.92rem;
+	}
+
+	.events p {
+		margin: 2px 0 0;
+		font-size: 0.78rem;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 860px) {
+		.quick-links {
+			grid-template-columns: repeat(3, 1fr);
+			row-gap: 8px;
+		}
+
+		.calendar-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Month calendar in week rows: day numbers on top, events as coloured bars across the days */
+	.mc-dows {
+		display: grid;
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+		padding-bottom: 4px;
+		text-align: center;
+		font-size: 0.72rem;
+		color: var(--color-muted);
+	}
+
+	.mc-weeks {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-evenly;
+	}
+
+	.mc-week {
+		display: grid;
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+		grid-template-rows: 26px repeat(var(--lanes, 1), 9px);
+		row-gap: 2px;
+		padding: 3px 0 5px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.mc-day {
+		grid-row: 1 / -1;
+		display: flex;
+		justify-content: center;
+		align-items: flex-start;
+		margin: -3px 1px -5px;
+		padding: 3px 0 0;
+		border: 0;
+		border-radius: 8px;
+		background: none;
+		font: inherit;
+		color: inherit;
+	}
+
+	.mc-num {
+		display: grid;
+		place-items: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		font-size: 0.82rem;
+		font-weight: 500;
+	}
+
+	.mc-day.weekend .mc-num {
+		color: var(--color-muted);
+	}
+
+	.mc-day.outside .mc-num {
+		color: #c2cfd5;
+		font-weight: 400;
+	}
+
+	.mc-day.holiday {
+		background: #e8edf0;
+	}
+
+	.mc-day.today .mc-num {
+		background: #111111;
+		color: #fff;
+		font-weight: 700;
+	}
+
+	.mc-day.has-ev {
+		position: relative;
+		cursor: pointer;
+	}
+
+	.mc-day.has-ev:hover,
+	.mc-day.has-ev:focus-visible {
+		outline: none;
+		background: rgb(43 179 214 / 10%);
+	}
+
+	.mc-day.holiday:hover {
+		background: #dfe6ea;
+	}
+
+	.mc-day.is-selected {
+		box-shadow: inset 0 0 0 2px var(--color-primary);
+	}
+
+	.mc-day.has-ev:hover .cal-tip,
+	.mc-day.has-ev:focus-visible .cal-tip {
+		display: flex;
+	}
+
+	.mc-day .cal-tip {
+		bottom: auto;
+		top: calc(100% + 6px);
+	}
+
+	.mc-day .cal-tip::after {
+		top: auto;
+		bottom: 100%;
+		border-top-color: transparent;
+		border-bottom-color: #17323d;
+	}
+
+	.mc-bar {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		min-width: 0;
+		margin: 0 3px;
+		padding: 0 6px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--c, var(--color-accent));
+		color: #fff;
+		font: inherit;
+		font-size: 0.62rem;
+		font-weight: 600;
+		line-height: 1;
+		text-decoration: none;
+		cursor: pointer;
+	}
+
+	.mc-bar.cont-left {
+		margin-left: 0;
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
+	}
+
+	.mc-bar.cont-right {
+		margin-right: 0;
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+	}
+
+	.mc-bar:hover,
+	.mc-bar:focus-visible {
+		z-index: 5;
+		outline: none;
+		filter: brightness(1.08);
+	}
+
+	/* colour only — the name shows on hover and in the box below */
+	.mc-bar-text {
+		display: none;
+	}
+
+	.mc-tip {
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: 0;
+		z-index: 30;
+		display: none;
+		flex-direction: column;
+		gap: 2px;
+		width: max-content;
+		max-width: 240px;
+		padding: 7px 11px;
+		border-radius: 10px;
+		background: #17323d;
+		color: #fff;
+		font-size: 0.76rem;
+		font-weight: 400;
+		line-height: 1.45;
+		white-space: normal;
+		text-align: left;
+		box-shadow: 0 8px 22px rgb(0 0 0 / 25%);
+		pointer-events: none;
+	}
+
+	.mc-bar.tip-right .mc-tip {
+		left: auto;
+		right: 0;
+	}
+
+	.mc-tip strong {
+		font-weight: 600;
+	}
+
+	.mc-tip span {
+		color: #b9d2db;
+		font-size: 0.7rem;
+	}
+
+	.mc-bar:hover .mc-tip,
+	.mc-bar:focus-visible .mc-tip {
+		display: flex;
+	}
+
+	.cal-detail .ev-range {
+		margin: 1px 0 0;
+		font-size: 0.7rem;
+		color: var(--color-primary-dark);
+	}
+
+	/* Homepage grid: left = performance / news / recruitment, right = calendar / events / คลังข้อมูล */
+	.home-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+		gap: 40px 28px;
+		align-items: start;
+		margin-top: 40px;
+	}
+
+	.hg-cell {
+		min-width: 0;
+		margin-top: 0;
+	}
+
+	.hg-perf { grid-column: 1; grid-row: 1; }
+	.hg-cal { grid-column: 2; grid-row: 1; }
+	.hg-news { grid-column: 1; grid-row: 2; }
+	.hg-docs { grid-column: 2; grid-row: 2; }
+	.hg-recruit { grid-column: 1 / -1; grid-row: 3; }
+
+
+	.home-grid [hidden] {
+		display: none !important;
+	}
+
+	/* performance: the video takes the column; earlier months list under it */
+	.hg-perf .perf {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.hg-perf .perf-list ul {
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	}
+
+	/* clickable calendar days: hover shows the events, click lists them in the box below */
+	.cal-day.has-ev {
+		position: relative;
+		padding: 0;
+		font: inherit;
+		font-size: 0.9rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.cal-day.has-ev:not(.event):not(.holiday) {
+		background: none;
+	}
+
+	.cal-day.has-ev:hover,
+	.cal-day.has-ev:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px rgb(43 179 214 / 35%);
+	}
+
+	.cal-day.is-selected {
+		border-color: var(--color-primary-dark);
+		box-shadow: 0 0 0 3px rgb(43 179 214 / 35%);
+	}
+
+	.cal-tip {
+		position: absolute;
+		bottom: calc(100% + 8px);
+		left: 50%;
+		z-index: 20;
+		display: none;
+		flex-direction: column;
+		gap: 4px;
+		width: max-content;
+		max-width: 240px;
+		padding: 8px 12px;
+		border-radius: 10px;
+		background: #17323d;
+		color: #fff;
+		font-size: 0.8rem;
+		font-weight: 500;
+		line-height: 1.4;
+		text-align: left;
+		transform: translateX(-50%);
+		box-shadow: 0 8px 22px rgb(0 0 0 / 25%);
+		pointer-events: none;
+	}
+
+	.cal-tip::after {
+		content: "";
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		border: 6px solid transparent;
+		border-top-color: #17323d;
+		transform: translateX(-50%);
+	}
+
+	.cal-tip.tip-left {
+		left: 0;
+		transform: none;
+	}
+
+	.cal-tip.tip-left::after {
+		left: 14px;
+	}
+
+	.cal-tip.tip-right {
+		left: auto;
+		right: 0;
+		transform: none;
+	}
+
+	.cal-tip.tip-right::after {
+		left: auto;
+		right: 8px;
+	}
+
+	.cal-tip-item {
+		display: block;
+		padding-left: 12px;
+		position: relative;
+	}
+
+	.cal-tip-item::before {
+		content: "";
+		position: absolute;
+		left: 0;
+		top: 0.5em;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--color-accent);
+	}
+
+	.cal-tip-item.holiday::before {
+		background: #c2cfd5;
+	}
+
+	.cal-day.has-ev:hover .cal-tip,
+	.cal-day.has-ev:focus-visible .cal-tip {
+		display: flex;
+	}
+
+	@media (hover: none) {
+		.cal-day.has-ev:hover .cal-tip {
+			display: none;
+		}
+	}
+
+	.cal-detail {
+		margin-top: 14px;
+	}
+
+	.cal-detail ul {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
+	}
+
+	/* smaller text in the day's event box */
+	.cal-detail {
+		padding: 14px 16px 16px;
+	}
+
+	.cal-detail .events-title {
+		margin-bottom: 8px;
+		font-size: 0.85rem;
+	}
+
+	.cal-detail .event-item {
+		gap: 10px;
+	}
+
+	.cal-detail .event-item h3 {
+		font-size: 0.8rem;
+		line-height: 1.4;
+	}
+
+	.cal-detail .event-item p {
+		font-size: 0.72rem;
+	}
+
+	.cal-detail .event-date {
+		width: 36px;
+		height: 40px;
+		border-radius: 8px;
+	}
+
+	.cal-detail .event-date strong {
+		font-size: 0.95rem;
+	}
+
+	.cal-detail .event-date small {
+		font-size: 0.58rem;
+	}
+
+	.cal-detail .cal-hint {
+		font-size: 0.8rem;
+	}
+
+	.cal-detail ul:not(:has(li:not([hidden]))) {
+		display: none;
+	}
+
+	.cal-hint {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		margin: 0;
+		font-size: 0.88rem;
+		color: var(--color-muted);
+	}
+
+	/* news in the left column: big story on top, the other four in a row under it */
+	.hg-news .news-top {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.hg-news .news-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 18px 16px;
+	}
+
+	/* คลังข้อมูล: same height as the news next to it; extra items go to the next page */
+	.hg-docs {
+		align-self: stretch;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.hg-docs .tabs {
+		margin-bottom: 12px;
+	}
+
+	/* ข้าราชการ / ลูกจ้าง beside the heading */
+	.docs-aud {
+		display: inline-flex;
+		align-self: center;
+		gap: 2px;
+		padding: 3px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: var(--color-surface);
+	}
+
+	.docs-aud button {
+		padding: 3px 12px;
+		border: 0;
+		border-radius: 999px;
+		background: none;
+		font: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+
+	.docs-aud button:hover {
+		color: var(--color-primary);
+	}
+
+	.docs-aud button.is-active {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	/* all six categories on one line in the narrow column */
+	.hg-docs .tabs {
+		flex-wrap: nowrap;
+		gap: 4px;
+	}
+
+	.hg-docs .tabs .button {
+		flex: 0 1 auto;
+		min-width: 0;
+		padding: 3px 8px;
+		font-size: 0.66rem;
+		white-space: nowrap;
+	}
+
+	.docs-card {
+		flex: 1 1 0;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* height 0 + grow: the list never makes the row taller, it fills what the news leaves */
+	.docs-card .item-list {
+		flex: 1 1 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.docs-card .item-list li.pg-first {
+		border-top: 0;
+	}
+
+	.docs-pager {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		padding: 10px 16px 14px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.pg-btn {
+		display: grid;
+		place-items: center;
+		width: 30px;
+		height: 30px;
+		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: 50%;
+		background: #fff;
+		color: var(--color-primary-dark);
+		cursor: pointer;
+	}
+
+	.pg-btn:hover:not(:disabled) {
+		border-color: var(--color-primary);
+		color: var(--color-primary);
+	}
+
+	.pg-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+
+	.pg-info {
+		min-width: 70px;
+		text-align: center;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 1000px) {
+		.home-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		/* one column: calendar, then its events, then the rest */
+		.hg-perf, .hg-cal, .hg-news, .hg-recruit, .hg-docs {
+			grid-column: 1;
+			grid-row: auto;
+		}
+
+		.hg-perf { order: 1; }
+		.hg-cal { order: 2; }
+		.hg-news { order: 3; }
+		.hg-docs { order: 4; }
+		.hg-recruit { order: 5; }
+
+		/* one column: no neighbour to match, so the list takes its natural height (fixed page size) */
+		.docs-card,
+		.docs-card .item-list {
+			flex: none;
+		}
+	}
+
+	@media (max-width: 760px) {
+		.hg-news .news-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+</style>

@@ -1,0 +1,108 @@
+---
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import { getEmDashCollection } from "emdash";
+import Icon from "../../components/Icon.astro";
+import Base from "../../layouts/Base.astro";
+import { getSiteInfo, mediaUrl } from "../../utils/site-info";
+import { formatThaiMonth, resolveVideo } from "../../utils/video";
+
+const [{ entries, cacheHint }, info] = await Promise.all([
+	getEmDashCollection("performance", { orderBy: { report_month: "desc" }, limit: 200 }),
+	getSiteInfo(),
+]);
+if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
+
+const items = entries.map((e) => {
+	const v = resolveVideo(e.data);
+	return {
+		entry: e,
+		month: formatThaiMonth(new Date(e.data.report_month as unknown as string)),
+		thumb: mediaUrl(e.data.poster) ?? (v?.kind === "embed" ? v.thumbnail : undefined),
+	};
+});
+const heading = info.heading_performance.replace(/เดือน$/, "").trim() || "ผลการดำเนินการ";
+---
+
+<Base title={`${heading}ประจำเดือน`}>
+	<Breadcrumbs items={[{ label: `${heading}ประจำเดือน` }]} />
+	<h1 class="section-title">{heading}ประจำเดือน</h1>
+	{
+		items.length === 0 ? (
+			<div class="card empty">ยังไม่มีวิดีโอผลการดำเนินการ</div>
+		) : (
+			<div class="grid">
+				{items.map(({ entry, month, thumb }) => (
+					<a href={`/performance/${encodeURIComponent(entry.id)}`} class="card item">
+						<span class="thumb" style={thumb ? `background-image:url("${thumb}")` : undefined}>
+							<span class="play"><Icon name="play" size={22} /></span>
+						</span>
+						<span class="body">
+							<small>{month}</small>
+							<strong>{entry.data.title}</strong>
+						</span>
+					</a>
+				))}
+			</div>
+		)
+	}
+</Base>
+
+<style>
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 20px;
+	}
+
+	.item {
+		overflow: hidden;
+		transition: transform 0.2s, box-shadow 0.2s;
+	}
+
+	.item:hover {
+		transform: translateY(-3px);
+		box-shadow: var(--shadow-lg);
+	}
+
+	.thumb {
+		display: grid;
+		place-items: center;
+		aspect-ratio: 16 / 9;
+		background: linear-gradient(135deg, #0f6f87, #0f2e3d) center / cover no-repeat;
+	}
+
+	.play {
+		display: grid;
+		place-items: center;
+		width: 52px;
+		height: 52px;
+		border-radius: 50%;
+		background: rgb(255 255 255 / 92%);
+		color: var(--color-primary);
+		transition: transform 0.2s;
+	}
+
+	.item:hover .play {
+		transform: scale(1.1);
+	}
+
+	.body {
+		display: flex;
+		flex-direction: column;
+		padding: 14px 18px 18px;
+	}
+
+	.body small {
+		color: var(--color-muted);
+	}
+
+	.body strong {
+		color: var(--color-primary-dark);
+	}
+
+	.empty {
+		padding: 32px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+</style>

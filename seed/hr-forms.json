@@ -1,0 +1,200 @@
+{
+	"$schema": "https://emdashcms.com/seed.schema.json",
+	"version": "1",
+	"meta": {
+		"name": "HR SAO forms",
+		"description": "Downloadable forms grouped by category",
+		"author": "HR SAO"
+	},
+	"collections": [
+		{
+			"slug": "forms",
+			"label": "แบบฟอร์ม",
+			"labelSingular": "แบบฟอร์ม",
+			"supports": [
+				"drafts",
+				"revisions",
+				"scheduling"
+			],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "ชื่อแบบฟอร์ม",
+					"type": "string",
+					"required": true,
+					"searchable": true
+				},
+				{
+					"slug": "file",
+					"label": "ไฟล์แนบ (PDF, Word, Excel ฯลฯ)",
+					"type": "file"
+				},
+				{
+					"slug": "link",
+					"label": "ลิงก์ภายนอก (ใช้เมื่อไม่มีไฟล์แนบ)",
+					"type": "url"
+				},
+				{
+					"slug": "description",
+					"label": "รายละเอียดเพิ่มเติม (ไม่บังคับ)",
+					"type": "text"
+				},
+				{
+					"slug": "availability",
+					"label": "สถานะการรับ (ไม่บังคับ — เลือกเมื่ออยากให้แสดงป้าย เปิด/ปิด)",
+					"type": "select",
+					"validation": {
+						"options": [
+							"เปิด",
+							"ปิด"
+						]
+					}
+				},
+				{
+					"slug": "attachments",
+					"label": "เอกสารประกอบ (แสดงเป็นข้อย่อยใต้แบบฟอร์มนี้)",
+					"type": "reference",
+					"validation": {
+						"targetCollection": "forms"
+					}
+				},
+				{
+					"slug": "show_new",
+					"label": "แสดงป้าย \"ใหม่\"",
+					"type": "boolean"
+				}
+			]
+		}
+	],
+	"taxonomies": [
+		{
+			"name": "form_category",
+			"label": "หมวดแบบฟอร์ม",
+			"labelSingular": "หมวดแบบฟอร์ม",
+			"hierarchical": false,
+			"collections": [
+				"forms"
+			],
+			"terms": [
+				{
+					"slug": "id-card",
+					"label": "บัตรประจำตัว"
+				},
+				{
+					"slug": "kp7",
+					"label": "ก.พ.7"
+				},
+				{
+					"slug": "leave",
+					"label": "การลา"
+				},
+				{
+					"slug": "resign",
+					"label": "ออกจากราชการ"
+				},
+				{
+					"slug": "relocation",
+					"label": "ขอย้าย"
+				},
+				{
+					"slug": "transfer",
+					"label": "ขอโอน"
+				},
+				{
+					"slug": "secondment",
+					"label": "ช่วยราชการ"
+				},
+				{
+					"slug": "study-report",
+					"label": "รายงานการศึกษา"
+				},
+				{
+					"slug": "certificate",
+					"label": "คำรับรอง"
+				},
+				{
+					"slug": "welfare",
+					"label": "สวัสดิการ"
+				},
+				{
+					"slug": "bank-loan",
+					"label": "สินเชื่อธนาคาร"
+				},
+				{
+					"slug": "hr-database",
+					"label": "แบบคำขอเพิ่ม-ปรับปรุงข้อมูลในฐานข้อมูลบุคลากรภาครัฐ"
+				},
+				{
+					"slug": "education-consent",
+					"label": "หนังสือยินยอมให้เปิดเผยข้อมูลแก่บุคคลที่สาม ของสถาบันการศึกษา"
+				},
+				{
+					"slug": "pension",
+					"label": "บำนาญพิเศษ / บำเหน็จตกทอด"
+				},
+				{
+					"slug": "meeting-room",
+					"label": "แบบฟอร์มขอใช้ห้องประชุม"
+				}
+			]
+		},
+		{
+			"name": "form_audience",
+			"label": "กลุ่มผู้ใช้แบบฟอร์ม",
+			"labelSingular": "กลุ่มผู้ใช้",
+			"hierarchical": false,
+			"collections": [
+				"forms"
+			],
+			"terms": [
+				{
+					"slug": "civil-servant",
+					"label": "ข้าราชการ"
+				},
+				{
+					"slug": "employee",
+					"label": "ลูกจ้าง"
+				}
+			]
+		}
+	],
+	"content": {
+		"forms": [
+			{
+				"id": "leave-form",
+				"slug": "leave-form",
+				"status": "published",
+				"data": {
+					"title": "แบบใบลาป่วย ลาคลอดบุตร ลากิจส่วนตัว"
+				},
+				"taxonomies": {
+					"form_category": [
+						"leave"
+					]
+				}
+			},
+			{
+				"id": "vacation-form",
+				"slug": "vacation-form",
+				"status": "published",
+				"data": {
+					"title": "แบบใบลาพักผ่อน"
+				},
+				"taxonomies": {
+					"form_category": [
+						"leave"
+					]
+				}
+			},
+			{
+				"id": "travel-form",
+				"slug": "travel-form",
+				"status": "published",
+				"data": {
+					"title": "แบบขออนุญาตไปราชการ"
+				},
+				"taxonomies": {}
+			}
+		]
+	}
+}

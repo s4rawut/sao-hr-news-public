@@ -1,0 +1,127 @@
+---
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+import Base from "../layouts/Base.astro";
+import { searchSite } from "../utils/search";
+
+const q = (Astro.url.searchParams.get("q") ?? "").trim().slice(0, 100);
+const results = q ? await searchSite(q, 100) : [];
+---
+
+<Base title={q ? `ค้นหา “${q}”` : "ค้นหา"}>
+	<Breadcrumbs items={q ? [{ label: "ค้นหา", href: "/search" }, { label: `“${q}”` }] : [{ label: "ค้นหา" }]} />
+	<h1 class="section-title">
+		{q ? <>ผลการค้นหา “{q}”</> : "ค้นหาทั้งเว็บไซต์"}
+		{q && <small>พบ {results.length.toLocaleString("th-TH")} รายการ</small>}
+	</h1>
+
+	<form action="/search" method="get" class="search-page-form">
+		<input type="search" name="q" value={q} placeholder="พิมพ์คำที่ต้องการค้นหา..." aria-label="คำค้นหา" />
+		<button type="submit" class="button is-active">ค้นหา</button>
+	</form>
+
+	{
+		q && (
+			<div class="card">
+				{results.length === 0 ? (
+					<p class="empty">ไม่พบข้อมูลที่ตรงกับ “{q}” ลองใช้คำที่สั้นลงหรือคำอื่น</p>
+				) : (
+					<ul class="results">
+						{results.map((r) => (
+							<li>
+								<a
+									href={r.url}
+									target={r.external ? "_blank" : undefined}
+									rel={r.external ? "noopener noreferrer" : undefined}
+								>
+									{r.image && <img src={r.image} alt="" loading="lazy" class="thumb" />}
+									<span class="body">
+										<span class="item-meta">
+											<span class="chip">{r.typeLabel}</span>
+											{r.date && <span>{r.date}</span>}
+										</span>
+										<span class="item-title">{r.title}</span>
+										{r.snippet && <span class="snippet">{r.snippet}</span>}
+									</span>
+								</a>
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
+		)
+	}
+</Base>
+
+<style>
+	.search-page-form {
+		display: flex;
+		gap: 10px;
+		margin-bottom: 20px;
+	}
+
+	.search-page-form input {
+		flex: 1;
+		min-width: 0;
+		padding: 12px 18px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		font: inherit;
+		font-size: 1rem;
+		background: var(--color-surface);
+	}
+
+	.results {
+		list-style: none;
+		margin: 0;
+		padding: 6px 20px;
+	}
+
+	.results li + li {
+		border-top: 1px solid var(--color-border);
+	}
+
+	.results a {
+		display: flex;
+		gap: 16px;
+		align-items: center;
+		padding: 14px 0;
+	}
+
+	.results a:hover .item-title {
+		color: var(--color-primary);
+	}
+
+	.thumb {
+		flex-shrink: 0;
+		width: 150px;
+		aspect-ratio: 2.8;
+		object-fit: cover;
+		border-radius: 8px;
+		border: 1px solid var(--color-border);
+	}
+
+	.body {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.snippet {
+		color: var(--color-muted);
+		font-size: 0.85rem;
+	}
+
+	.empty {
+		margin: 0;
+		padding: 28px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 560px) {
+		.thumb {
+			width: 96px;
+		}
+	}
+</style>

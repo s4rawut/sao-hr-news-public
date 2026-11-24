@@ -1,0 +1,31 @@
+---
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import RecruitLevels from "../../components/RecruitLevels.astro";
+import RecruitList from "../../components/RecruitList.astro";
+import Base from "../../layouts/Base.astro";
+import { getRecruitData } from "../../utils/recruit";
+import { getSiteInfo } from "../../utils/site-info";
+
+// Overview: level cards, then every announcement (newest first), including ones without a level.
+const [data, info] = await Promise.all([getRecruitData(), getSiteInfo()]);
+if (Astro.cache?.enabled) {
+	for (const hint of data.cacheHints) Astro.cache.set(hint);
+	Astro.cache.set(info.cacheHint);
+}
+const title = info.heading_recruitments;
+---
+
+<Base title={title}>
+	<Breadcrumbs items={[{ label: title }]} />
+	<h1 class="section-title">{title}</h1>
+	<RecruitLevels types={data.types} stageOf={data.stageOf} />
+
+	<h2 class="section-title latest">ประกาศล่าสุด</h2>
+	<RecruitList entries={data.entries} levelOf={data.levelOf} stageOf={data.stageOf} />
+</Base>
+
+<style>
+	.latest {
+		margin-top: 44px;
+	}
+</style>

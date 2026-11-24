@@ -1,0 +1,312 @@
+---
+import { siteLink } from "../../utils/site-link";
+import CopyLink from "../../components/CopyLink.astro";
+import { postDate } from "../../utils/post-date";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import {
+	getEmDashEntry,
+	getSeoMeta,
+	decodeSlug,
+	getSiteSettings,
+} from "emdash";
+import { Image, PortableText } from "emdash/ui";
+import Base from "../../layouts/Base.astro";
+import { resolveStarterSiteIdentity } from "../../utils/site-identity";
+import { formatThaiLong } from "../../utils/thai-date";
+import Icon from "../../components/Icon.astro";
+import { mediaUrl } from "../../utils/site-info";
+
+const slug = decodeSlug(Astro.params.slug);
+
+if (!slug) {
+	return Astro.rewrite("/404");
+}
+
+const { entry: post, cacheHint } = await getEmDashEntry("posts", slug);
+
+if (!post) {
+	return Astro.rewrite("/404");
+}
+
+if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
+const { siteTitle } = resolveStarterSiteIdentity(await getSiteSettings());
+
+// SEO meta from content fields
+const seo = getSeoMeta(post, {
+	siteTitle,
+	siteUrl: Astro.url.origin,
+	path: Astro.url.pathname.replace(/\/$/, ""),
+});
+
+// Taxonomy terms are already hydrated onto the entry by getEmDashEntry.
+const tags = post.data.terms?.tag ?? [];
+const categories = post.data.terms?.category ?? [];
+
+// The page shows only the title, date and categories, then the post's documents (PDF files and
+// images from its content) as cards. Each opens in the preview window first; download is inside it.
+type Block = { _type?: string; url?: string; filename?: string; asset?: { url?: string; meta?: Record<string, unknown> }; alt?: string };
+const blocks = (Array.isArray(post.data.content) ? post.data.content : []) as Block[];
+type Doc = { name: string; kind: string; label: string; view: string; download: string; filename: string; external?: boolean };
+// "ไฟล์แนบ" and "ลิงก์ไฟล์ / ลิงก์ภายนอก" fields come first
+const fieldDocs: Doc[] = [];
+const att = post.data.attachment as { filename?: string; mimeType?: string; meta?: Record<string, unknown> } | undefined;
+const attUrl = mediaUrl(att as never);
+if (att && attUrl) {
+	const filename = att.filename ?? (typeof att.meta?.storageKey === "string" ? att.meta.storageKey : "ไฟล์แนบ");
+	const key = typeof att.meta?.storageKey === "string" ? att.meta.storageKey : "";
+	const isPdf = att.mimeType === "application/pdf" || /\.pdf$/i.test(filename);
+	fieldDocs.push({
+		name: filename.replace(/\.[^.]+$/, ""),
+		kind: isPdf ? "pdf" : "file",
+		label: isPdf ? "PDF" : (filename.split(".").pop()?.toUpperCase() ?? "ไฟล์"),
+		view: isPdf && key ? `/files/pdf/${encodeURIComponent(key)}?name=${encodeURIComponent(filename)}` : attUrl,
+		download: attUrl,
+		filename,
+	});
+}
+const attLink = siteLink(post.data.attachment_link as string | undefined);
+if (attLink) {
+	fieldDocs.push({ name: post.data.title, kind: "link", label: "ลิงก์", view: attLink, download: attLink, filename: "", external: /^https?:\/\//.test(attLink) });
+}
+const contentDocs: Doc[] = blocks.flatMap((b) => {
+	if (b._type === "file" && b.url) {
+		const isPdf = /\.pdf$/i.test(b.url) || /\.pdf$/i.test(b.filename ?? "");
+		const key = b.url.split("/").pop() ?? "";
+		const name = (b.filename ?? key).replace(/\.[^.]+$/, "");
+		return [{
+			name,
+			kind: isPdf ? "pdf" : "file",
+			label: isPdf ? "PDF" : (b.filename?.split(".").pop()?.toUpperCase() ?? "ไฟล์"),
+			view: isPdf ? `/files/pdf/${encodeURIComponent(key)}?name=${encodeURIComponent(b.filename ?? key)}` : b.url,
+			download: b.url,
+			filename: b.filename ?? key,
+		}];
+	}
+	if (b._type === "image" && b.asset?.url) {
+		return [{ name: b.alt || post.data.title, kind: "image", label: "รูปภาพ", view: b.asset.url, download: b.asset.url, filename: b.asset.url.split("/").pop() ?? "" }];
+	}
+	return [];
+});
+const docs = [...fieldDocs, ...contentDocs];
+---
+
+<Base
+	title={seo.title}
+	pageTitle={seo.ogTitle}
+	description={seo.description}
+	canonical={seo.canonical}
+	image={seo.ogImage}
+	content={{ collection: "posts", id: post.data.id, slug }}
+>
+	<Breadcrumbs
+		items={[
+			{ label: "คลังข้อมูล", href: "/posts" },
+			...(categories[0] ? [{ label: categories[0].label, href: `/category/${categories[0].slug}` }] : []),
+			{ label: post.data.title },
+		]}
+	/>
+	<article class="card prose">
+		{
+			post.data.featured_image && (
+				<div class="post-banner" {...post.edit.featured_image}>
+					<Image image={post.data.featured_image} />
+				</div>
+			)
+		}
+
+		<h1 {...post.edit.title}>{post.data.title}</h1>
+
+		{
+			postDate(post) && (
+				<time class="item-meta" datetime={postDate(post)!.toISOString()}>
+					{formatThaiLong(postDate(post)!)}
+				</time>
+			)
+		}
+
+		<div class="post-copy"><CopyLink /></div>
+
+		{
+			categories.length > 0 && (
+				<div class="post-terms">
+					{categories.map((c) => (
+						<a href={`/category/${c.slug}`} class="chip">{c.label}</a>
+					))}
+				</div>
+			)
+		}
+
+		{
+			docs.length > 0 ? (
+				<ul class="post-docs">
+					{docs.map((d) => (
+						<li>
+							{d.kind === "link" ? (
+								<a href={d.view} class="post-doc" target={d.external ? "_blank" : undefined} rel={d.external ? "noopener noreferrer" : undefined}>
+									<span class="post-doc-icon"><Icon name="link" size={22} /></span>
+									<span class="post-doc-name">{d.name}</span>
+									<span class="post-doc-type">{d.label}</span>
+									<span class="post-doc-open">เปิดลิงก์</span>
+								</a>
+							) : (
+							<a
+								href={d.view}
+								class="post-doc"
+								data-preview-kind={d.kind}
+								data-preview-view={d.view}
+								data-preview-open={d.view}
+								data-preview-download={d.download}
+								data-preview-name={d.filename}
+								data-preview-title={d.name}
+							>
+								<span class="post-doc-icon"><Icon name="file" size={22} /></span>
+								<span class="post-doc-name">{d.name}</span>
+								<span class="post-doc-type">{d.label}</span>
+								<span class="post-doc-open">เปิดดู</span>
+							</a>
+							)}
+						</li>
+					))}
+				</ul>
+			) : (
+				<PortableText value={post.data.content} />
+			)
+		}
+
+		{
+			tags.length > 0 && (
+				<div>
+					{tags.map((t) => (
+						<a href={`/tag/${t.slug}`}>{t.label}</a>
+					))}
+				</div>
+			)
+		}
+	</article>
+
+</Base>
+
+<style>
+	.post-banner {
+		margin-bottom: 20px;
+		border-radius: 16px;
+		overflow: hidden;
+	}
+
+	.post-banner :global(img) {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	.post-docs {
+		list-style: none;
+		margin: 24px 0 0;
+		padding: 0;
+		display: grid;
+		gap: 10px;
+	}
+
+	.post-doc {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		padding: 14px 18px;
+		border: 1px solid var(--color-border);
+		border-radius: 14px;
+		background: #fff;
+		color: var(--color-text);
+		text-decoration: none;
+		transition: border-color 0.15s, box-shadow 0.15s;
+	}
+
+	.post-doc:hover {
+		border-color: var(--color-primary);
+		box-shadow: var(--shadow);
+	}
+
+	.post-doc-icon {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 44px;
+		height: 44px;
+		border-radius: 12px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+	}
+
+	.post-doc-name {
+		flex: 1;
+		min-width: 0;
+		font-weight: 600;
+	}
+
+	.post-doc-type {
+		flex-shrink: 0;
+		padding: 2px 10px;
+		border-radius: 999px;
+		background: #fdecec;
+		color: #c62828;
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+
+	.post-doc-open {
+		flex-shrink: 0;
+		padding: 7px 16px;
+		border-radius: 999px;
+		background: var(--color-primary);
+		color: #fff;
+		font-size: 0.85rem;
+		font-weight: 700;
+	}
+
+	@media (max-width: 600px) {
+		.post-doc-open {
+			display: none;
+		}
+	}
+
+	.post-contact {
+		margin-top: 28px;
+		padding: 16px 20px;
+		border: 1px solid var(--color-border);
+		border-left: 4px solid var(--color-primary);
+		border-radius: var(--radius-sm);
+		background: var(--color-primary-soft);
+	}
+
+	.post-contact-title {
+		margin: 0 0 8px;
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: var(--color-primary);
+	}
+
+	.post-contact-body {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 18px;
+	}
+
+	.post-contact-name {
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.post-contact-phone {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-weight: 700;
+		color: var(--color-primary);
+		text-decoration: none;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.post-contact-phone:hover {
+		text-decoration: underline;
+	}
+</style>

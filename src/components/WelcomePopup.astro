@@ -1,0 +1,264 @@
+---
+import Icon from "./Icon.astro";
+
+import { createHash } from "node:crypto";
+import { getSiteInfo } from "../utils/site-info";
+
+/**
+ * "มีอะไรใหม่" welcome popup on the homepage. Its texts come from admin → ข้อมูลเว็บไซต์
+ * ("ป๊อปอัพ มีอะไรใหม่: …"); each line of the list is "หัวข้อ | คำอธิบาย" and gets an icon from
+ * words in its heading. Shown once per browser; the remembered key follows the text, so editing
+ * the popup in admin shows it again to everyone once. "ลองค้นหาเลย" opens the header search.
+ */
+const info = await getSiteInfo();
+const title = info.welcome_title.trim() || "ยินดีต้อนรับสู่เว็บไซต์ใหม่ สบท.";
+const lead = info.welcome_lead.trim();
+const iconFor = (heading: string) =>
+	/ค้นหา/.test(heading)
+		? "search"
+		: /ปฏิทิน|กิจกรรม/.test(heading)
+			? "calendar"
+			: /ข่าว/.test(heading)
+				? "chat"
+				: /คัดเลือก|สมัคร|สถานะ/.test(heading)
+					? "calendar-check"
+					: /คลัง|เอกสาร|คำสั่ง|ประกาศ|ระเบียบ/.test(heading)
+						? "file"
+						: /แบบฟอร์ม/.test(heading)
+							? "clipboard"
+							: "check";
+const features = info.welcome_items
+	.split(/\r?\n/)
+	.map((line) => line.trim())
+	.filter(Boolean)
+	.map((line) => {
+		const [heading, ...rest] = line.split("|");
+		const t = heading.trim();
+		return { icon: iconFor(t), title: t, text: rest.join("|").trim() };
+	});
+// the original wording keeps the key people already dismissed; any edit makes a new one
+const contentKey = `${title}\n${lead}\n${info.welcome_items.trim()}`;
+const ORIGINAL = `ยินดีต้อนรับสู่เว็บไซต์ใหม่ สบท.\nมีอะไรใหม่ในเว็บไซต์ สบท.\n${"ระบบค้นหา | ค้นหาได้ทุกเรื่องในที่เดียว ทั้งเอกสาร แบบฟอร์ม โครงสร้าง หน่วยรับตรวจ และรายชื่อบุคลากร สบท.\nปฏิทินกิจกรรม | ดูกำหนดการและกิจกรรมของ สบท. ได้สะดวกยิ่งขึ้น\nข่าวประชาสัมพันธ์ | ข่าวสำคัญที่แสดงให้เห็นไว้ในหน้าแรกสุด\nคลังข้อมูล | ประกาศ คำสั่ง ระเบียบ หลักเกณฑ์ บันทึกข้อความ เลือกดูตามหมวดหมู่ ได้สะดวกยิ่งขึ้น\nประกาศคณะกรรมการคัดเลือกฯ | ตรวจสอบสถานะการรับสมัครและการคัดเลือกได้ในแต่ละระดับตำแหน่งว่าอยู่ในขั้นตอนใด"}`;
+const STORAGE_KEY =
+	contentKey === ORIGINAL ? "hr-welcome-v2" : `hr-welcome-${createHash("sha1").update(contentKey).digest("hex").slice(0, 10)}`;
+---
+
+<dialog class="wp" data-welcome data-key={STORAGE_KEY} aria-labelledby="wp-title">
+	<div class="wp-box">
+		<button type="button" class="wp-close" data-wp-close aria-label="ปิด">
+			<Icon name="close" size={20} />
+		</button>
+		<div class="wp-hero">
+			<span class="wp-badge">ใหม่</span>
+			<h2 id="wp-title" class="wp-title">{title}</h2>
+			{lead && <p class="wp-lead">{lead}</p>}
+		</div>
+		<ul class="wp-list">
+			{features.map((f) => (
+				<li>
+					<span class="wp-icon"><Icon name={f.icon as any} size={20} /></span>
+					<span>
+						<strong>{f.title}</strong>
+						<small>{f.text}</small>
+					</span>
+				</li>
+			))}
+		</ul>
+		<div class="wp-actions">
+			<button type="button" class="wp-btn wp-primary" data-wp-search>
+				<Icon name="search" size={18} /> ลองค้นหาเลย
+			</button>
+			<button type="button" class="wp-btn" data-wp-close>เข้าสู่เว็บไซต์</button>
+		</div>
+	</div>
+</dialog>
+
+<script>
+	const dialog = document.querySelector<HTMLDialogElement>("[data-welcome]");
+	if (dialog) {
+		const key = dialog.dataset.key!;
+		let seen = false;
+		try {
+			seen = localStorage.getItem(key) === "1";
+		} catch {
+			// storage blocked: show it, it just won't be remembered
+		}
+		const remember = () => {
+			try {
+				localStorage.setItem(key, "1");
+			} catch {}
+		};
+		const close = () => {
+			remember();
+			dialog.close();
+		};
+		// waits for the occasion banner popup (EntryBanner) to be closed first, if it is showing
+		const open = () => dialog.showModal();
+		if (!seen)
+			setTimeout(() => {
+				const banner = document.querySelector<HTMLDialogElement>("[data-entry-banner]");
+				if (banner?.open) banner.addEventListener("close", () => setTimeout(open, 300), { once: true });
+				else open();
+			}, 600);
+		dialog.querySelectorAll("[data-wp-close]").forEach((b) => b.addEventListener("click", close));
+		dialog.addEventListener("click", (e) => {
+			if (e.target === dialog) close();
+		});
+		dialog.addEventListener("cancel", remember);
+		dialog.querySelector("[data-wp-search]")?.addEventListener("click", () => {
+			close();
+			const toggle = document.querySelector<HTMLButtonElement>(".search-toggle");
+			if (toggle && toggle.getAttribute("aria-expanded") !== "true") toggle.click();
+			setTimeout(() => document.querySelector<HTMLInputElement>(".search-panel input[type=search]")?.focus(), 50);
+		});
+	}
+</script>
+
+<style>
+	.wp {
+		width: min(560px, calc(100vw - 32px));
+		max-height: calc(100dvh - 32px);
+		padding: 0;
+		border: 0;
+		border-radius: 22px;
+		overflow: auto;
+		background: var(--color-surface);
+		color: var(--color-text);
+		box-shadow: 0 24px 60px rgb(10 30 40 / 35%);
+	}
+
+	.wp::backdrop {
+		background: rgb(10 30 40 / 55%);
+	}
+
+	.wp-box {
+		position: relative;
+	}
+
+	.wp-close {
+		position: absolute;
+		top: 14px;
+		right: 14px;
+		z-index: 1;
+		display: grid;
+		place-items: center;
+		width: 38px;
+		height: 38px;
+		border: 0;
+		border-radius: 50%;
+		background: rgb(255 255 255 / 18%);
+		color: #fff;
+		cursor: pointer;
+	}
+
+	.wp-close:hover {
+		background: rgb(255 255 255 / 30%);
+	}
+
+	.wp-hero {
+		padding: 30px 28px 24px;
+		color: #fff;
+		background:
+			radial-gradient(rgba(255, 255, 255, 0.09) 2px, transparent 2px) 0 0 / 24px 24px,
+			linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+	}
+
+	.wp-badge {
+		display: inline-block;
+		margin-bottom: 10px;
+		padding: 3px 14px;
+		border-radius: 999px;
+		background: #ffd166;
+		color: #3a2a00;
+		font-size: 0.8rem;
+		font-weight: 700;
+	}
+
+	.wp-title {
+		margin: 0;
+		font-size: 1.45rem;
+		line-height: 1.35;
+		color: #fff;
+	}
+
+	.wp-lead {
+		margin: 6px 0 0;
+		opacity: 0.92;
+	}
+
+	.wp-list {
+		list-style: none;
+		margin: 0;
+		padding: 18px 24px 4px;
+		display: grid;
+		gap: 14px;
+	}
+
+	.wp-list li {
+		display: flex;
+		gap: 14px;
+		align-items: flex-start;
+	}
+
+	.wp-icon {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 40px;
+		height: 40px;
+		border-radius: 12px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+	}
+
+	.wp-list strong {
+		display: block;
+		color: var(--color-primary-dark);
+	}
+
+	.wp-list small {
+		display: block;
+		color: var(--color-muted);
+		font-size: 0.85rem;
+		line-height: 1.5;
+	}
+
+	.wp-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 10px;
+		padding: 18px 24px 24px;
+	}
+
+	.wp-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 22px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: #fff;
+		font: inherit;
+		font-weight: 700;
+		color: var(--color-primary-dark);
+		cursor: pointer;
+	}
+
+	.wp-primary {
+		border-color: var(--color-primary);
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	.wp-primary:hover {
+		background: var(--color-primary-dark);
+	}
+
+	@media (max-width: 480px) {
+		.wp-actions .wp-btn {
+			flex: 1;
+			justify-content: center;
+		}
+	}
+</style>

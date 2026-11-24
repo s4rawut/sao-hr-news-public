@@ -1,0 +1,41 @@
+---
+import type { RecruitStage } from "../utils/recruit";
+
+/** Coloured badge for an announcement's stage; label and colour come from "สถานะประกาศรับสมัคร". */
+interface Props {
+	stage?: RecruitStage;
+	small?: boolean;
+}
+const { stage, small = false } = Astro.props;
+---
+
+{stage && <span class:list={["status", { small }]} style={`--st:${stage.color}`}>{stage.label}</span>}
+
+<style>
+	.status {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 12px;
+		border-radius: 999px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		white-space: nowrap;
+		color: var(--st);
+		/* light tint of the same colour */
+		background: color-mix(in srgb, var(--st) 14%, #fff);
+	}
+
+	.status::before {
+		content: "";
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.status.small {
+		padding: 3px 10px;
+		font-size: 0.72rem;
+	}
+</style>

@@ -1,0 +1,288 @@
+---
+import { getEmDashReferences } from "emdash";
+import Icon from "./Icon.astro";
+import { formFileType, formPreview } from "../utils/forms";
+import { postDate, showNewBadge } from "../utils/post-date";
+import { getSiteInfo } from "../utils/site-info";
+import { formatThaiShort } from "../utils/thai-date";
+
+/** One list of downloadable forms (shared by the forms page accordion and each category page). */
+interface Props {
+	forms: { form: any; groups: { slug: string; label: string }[] }[];
+}
+const { forms } = Astro.props;
+
+// Each item opens in the page's preview window (FilePreview); these attributes tell it what to show.
+const previewAttrs = (data: any) => {
+	const p = formPreview(data);
+	if (!p) return undefined;
+	return {
+		href: p.open,
+		"data-preview-kind": p.kind,
+		"data-preview-view": p.view,
+		"data-preview-open": p.open,
+		"data-preview-download": p.download,
+		"data-preview-name": p.downloadName,
+		"data-preview-title": data.title,
+	};
+};
+
+// "เอกสารประกอบ" picked on a form are listed as sub-items under it (in the order picked),
+// and a form that is another listed form's attachment is not repeated at the top level.
+const childrenOf = new Map<string, any[]>();
+await Promise.all(
+	forms.map(async ({ form }) => {
+		const ref = await getEmDashReferences("forms", form.data.id, "attachments", { limit: 50 });
+		if (ref.entries.length) childrenOf.set(form.data.id, ref.entries);
+	}),
+);
+const childIds = new Set([...childrenOf.values()].flat().map((c) => c.data.id));
+// newest "วันที่" first; forms without a date keep their order after the dated ones
+const topLevel = forms
+	.filter(({ form }) => !childIds.has(form.data.id))
+	.map((f, i) => ({ f, i, t: postDate(f.form)?.getTime() }))
+	.sort((a, b) => (a.t !== undefined && b.t !== undefined ? b.t - a.t || a.i - b.i : a.t !== undefined ? -1 : b.t !== undefined ? 1 : a.i - b.i))
+	.map((x) => x.f);
+const newDays = (await getSiteInfo()).new_badge_days;
+---
+
+<ul class="form-list">
+	{topLevel.map(({ form, groups }) => {
+		const children = childrenOf.get(form.data.id) ?? [];
+		const preview = previewAttrs(form.data);
+		const type = formFileType(form.data);
+		const external = !form.data.file && !!form.data.link;
+		const inner = (
+			<>
+				<span class="main">
+					<span class="title" {...form.edit.title}>{form.data.title}</span>
+					{form.data.description && <span class="note">{form.data.description}</span>}
+					{postDate(form) && <span class="note form-date">{formatThaiShort(postDate(form)!)}</span>}
+				</span>
+				<span class="side">
+					{groups.map((g) => (
+					<span class="aud-chip">{g.label}</span>
+				))}
+				{form.data.availability && (
+					<span class:list={["status", form.data.availability === "เปิด" ? "is-open" : "is-closed"]}>
+						{form.data.availability === "เปิด" ? "เปิดรับ" : "ปิดรับ"}
+					</span>
+				)}
+				{showNewBadge(form, newDays) && <span class="badge-new">ใหม่</span>}
+					{type && <span class="chip">{type}</span>}
+					{preview && (
+						<span class="action" aria-hidden="true">
+							<Icon name={external ? "arrow" : "download"} size={18} />
+						</span>
+					)}
+				</span>
+			</>
+		);
+		return (
+			<li>
+				{preview ? (
+					<a {...preview} target="_blank" rel="noopener noreferrer" class="row">
+						{inner}
+					</a>
+				) : (
+					<div class="row">{inner}</div>
+				)}
+				{children.length > 0 && (
+					<ul class="sub-list">
+						{children.map((child) => {
+							const cPreview = previewAttrs(child.data);
+							const cType = formFileType(child.data);
+							const cExternal = !child.data.file && !!child.data.link;
+							const cInner = (
+								<>
+									<span class="main">
+										<span class="sub-title">{child.data.title}</span>
+										{child.data.description && <span class="note">{child.data.description}</span>}
+									</span>
+									<span class="side">
+										{cType && <span class="chip">{cType}</span>}
+										{cPreview && (
+											<span class="action sm" aria-hidden="true">
+												<Icon name={cExternal ? "arrow" : "download"} size={16} />
+											</span>
+										)}
+									</span>
+								</>
+							);
+							return (
+								<li>
+									{cPreview ? (
+										<a {...cPreview} target="_blank" rel="noopener noreferrer" class="sub-row">
+											{cInner}
+										</a>
+									) : (
+										<div class="sub-row">{cInner}</div>
+									)}
+								</li>
+							);
+						})}
+					</ul>
+				)}
+			</li>
+		);
+	})}
+</ul>
+
+<style>
+	.form-list {
+		list-style: none;
+		margin: 0;
+		padding: 8px 32px;
+	}
+
+	.sub-list {
+		list-style: none;
+		margin: -8px 0 18px;
+		padding: 0 0 0 18px;
+		border-left: 2px solid var(--color-primary-soft);
+	}
+
+	.form-list .sub-list li + li {
+		border-top: 0;
+	}
+
+	.sub-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 8px 0;
+	}
+
+	.sub-title {
+		font-size: 0.92rem;
+		font-weight: 500;
+		transition: color 0.15s;
+	}
+
+	.sub-title::before {
+		content: "└ ";
+		color: var(--color-muted);
+	}
+
+	a.sub-row:hover .sub-title {
+		color: var(--color-primary);
+	}
+
+	a.sub-row:hover .action {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	.action.sm {
+		width: 30px;
+		height: 30px;
+	}
+
+	.form-list > li + li {
+		border-top: 1px solid var(--color-border);
+	}
+
+	.row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 20px 0;
+	}
+
+	a.row:hover .title {
+		color: var(--color-primary);
+	}
+
+	a.row:hover .action {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	.main {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+
+	.title {
+		font-size: 1.02rem;
+		font-weight: 600;
+		transition: color 0.15s;
+	}
+
+	.note {
+		color: var(--color-muted);
+		font-size: 0.85rem;
+	}
+
+	.side {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.status {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 2px 10px;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.status::before {
+		content: "";
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.status.is-open {
+		background: #e3f6ea;
+		color: #17803d;
+	}
+
+	.status.is-closed {
+		background: #fdeaea;
+		color: #c62828;
+	}
+
+	.aud-chip {
+		padding: 2px 10px;
+		border-radius: 999px;
+		border: 1px solid var(--color-border);
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-primary-dark);
+	}
+
+	.action {
+		display: grid;
+		place-items: center;
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		transition: background 0.15s, color 0.15s;
+	}
+
+	@media (max-width: 600px) {
+		.form-list {
+			padding: 4px 18px;
+		}
+
+		.row {
+			flex-direction: column;
+			gap: 8px;
+		}
+	}
+</style>

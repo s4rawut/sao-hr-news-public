@@ -1,0 +1,2064 @@
+{
+  "collections": [
+    {
+      "slug": "about_tabs",
+      "label": "แท็บหน้าเกี่ยวกับเรา",
+      "labelSingular": "แท็บ",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อแท็บ",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "subtitle",
+          "label": "บรรทัดใต้หัวข้อ (ไม่บังคับ บรรทัดแรกตัวหนา เช่น ชื่อสำนัก / ชื่อหน่วยงาน)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "display",
+          "label": "รูปแบบการแสดง",
+          "type": "select",
+          "required": true,
+          "unique": false,
+          "validation": {
+            "options": [
+              "เนื้อหา / รูปภาพ",
+              "ทำเนียบผู้อำนวยการ",
+              "ผังที่นั่งและเบอร์โทร",
+              "ภาพบุคลากรแต่ละกลุ่ม",
+              "โครงสร้างสำนัก (ผู้บริหาร + ภาพ)"
+            ]
+          }
+        },
+        {
+          "slug": "image",
+          "label": "ภาพหลักของแท็บ (เช่น ภาพโครงสร้างสำนัก / แท็บทำเนียบ = ตราสัญลักษณ์ด้านบน)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "attachment",
+          "label": "ไฟล์แนบ (PDF) — แสดงเป็นลิงก์ข้อความท้ายแท็บ",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf"
+            ]
+          }
+        },
+        {
+          "slug": "attachment_text",
+          "label": "ข้อความลิงก์ไฟล์แนบ (เว้นว่าง = ดาวน์โหลดไฟล์ PDF)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "content",
+          "label": "ข้อความในแท็บ (ไม่บังคับ — แท็บโครงสร้างจะแสดงใต้ภาพ เช่น เลขที่คำสั่ง)",
+          "type": "portableText",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับแท็บ (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "audit_offices",
+      "label": "หน่วยรับตรวจแยกตามสำนัก",
+      "labelSingular": "สำนัก",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อสำนัก (เช่น สำนักตรวจเงินแผ่นดินที่ 1)",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "subtitle",
+          "label": "บรรทัดรอง (เช่น (สำนักนายกรัฐมนตรี))",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "auditees",
+          "label": "หน่วยรับตรวจที่รับผิดชอบ (บรรทัดละ 1 หน่วย)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "note",
+          "label": "หมายเหตุใต้รายชื่อ (ขึ้นต้นด้วย * สีแดง; ใส่ * ท้ายชื่อหน่วยในรายชื่อเพื่อชี้มาที่หมายเหตุนี้)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "audit_orders",
+      "label": "คำสั่งมอบหมายหน่วยรับตรวจ",
+      "labelSingular": "คำสั่ง",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อคำสั่ง",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "file",
+          "label": "ไฟล์คำสั่ง (PDF)",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf"
+            ]
+          }
+        },
+        {
+          "slug": "link",
+          "label": "ลิงก์ (ใช้เมื่อไม่มีไฟล์ PDF)",
+          "type": "url",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (น้อยขึ้นก่อน เว้นว่าง = ล่าสุดขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "directors",
+      "label": "ทำเนียบผู้อำนวยการสำนัก",
+      "labelSingular": "ผู้อำนวยการ",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อ - นามสกุล",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "photo",
+          "label": "รูปถ่าย",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "position",
+          "label": "ตำแหน่ง (เว้นว่าง = ผู้อำนวยการสำนักบริหารทรัพยากรบุคคล)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "start_date",
+          "label": "วันที่เริ่มดำรงตำแหน่ง",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "end_date",
+          "label": "วันที่สิ้นสุด (เว้นว่าง = ปัจจุบัน)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "term",
+          "label": "ข้อความช่วงดำรงตำแหน่ง (ใช้เมื่อไม่ได้กรอกวันที่ เช่น พ.ศ. 2565 – ปัจจุบัน)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "is_current",
+          "label": "ดำรงตำแหน่งปัจจุบัน (แสดงเด่นด้านบน)",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (เว้นว่าง = เรียงตามวันที่เริ่ม ล่าสุดขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "entry_banners",
+      "label": "ป๊อปอัพแบนเนอร์หน้าแรก",
+      "labelSingular": "แบนเนอร์",
+      "supports": [
+        "drafts"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อแบนเนอร์ (สำหรับ admin)",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "show",
+          "label": "แสดงแบนเนอร์นี้",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "image",
+          "label": "รูปแบนเนอร์ (ถ้าอัปโหลด จะแสดงรูปนี้แทนข้อความด้านล่าง แนะนำแนวนอน 16:9)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "style",
+          "label": "รูปแบนเนอร์แบบข้อความ",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "ไว้ทุกข์ (ดำ)",
+              "ไว้ทุกข์ (ขาว)",
+              "เฉลิมพระเกียรติ (น้ำเงิน-ทอง)"
+            ]
+          }
+        },
+        {
+          "slug": "top_text",
+          "label": "ข้อความบรรทัดบน (เช่น สถิตในใจไทยนิรันดร์)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "main_text",
+          "label": "ข้อความหลัก / พระนาม (ขึ้นบรรทัดใหม่ได้)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "message",
+          "label": "ข้อความน้อมรำลึก (ขึ้นบรรทัดใหม่ได้)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "signature",
+          "label": "ผู้ถวาย / ลงท้าย (ขึ้นบรรทัดใหม่ได้)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "link",
+          "label": "ลิงก์เมื่อกดแบนเนอร์ (เว้นว่างได้)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "event_types",
+      "label": "ประเภทกิจกรรม (สีในปฏิทิน)",
+      "labelSingular": "ประเภทกิจกรรม",
+      "supports": [
+        "drafts"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อประเภท (เช่น อำนวยการสูง)",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "color",
+          "label": "สีในปฏิทิน (กดเลือกสี หรือพิมพ์รหัสสี เช่น #1d7a46)",
+          "type": "string",
+          "required": true,
+          "unique": false,
+          "widget": "thai-date:color"
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับในคำอธิบายสี (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "events",
+      "label": "ปฏิทินกิจกรรม",
+      "labelSingular": "กิจกรรม",
+      "supports": [
+        "drafts"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อกิจกรรม",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "event_date",
+          "label": "วันที่",
+          "type": "datetime",
+          "required": true,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "end_date",
+          "label": "ถึงวันที่ (ถ้ากิจกรรมมีหลายวัน เช่น ช่วงรับสมัคร — เว้นว่าง = วันเดียว)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "type_name",
+          "label": "ประเภทกิจกรรม (สีในปฏิทิน)",
+          "type": "string",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:eventtype"
+        },
+        {
+          "slug": "description",
+          "label": "รายละเอียด",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "holiday",
+          "label": "เป็นวันหยุดราชการ",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "link",
+          "label": "ลิงก์เมื่อกดกิจกรรม (เช่น /recruitments/academic-senior-pro หรือ https://…) — เว้นว่างได้",
+          "type": "string",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "executives",
+      "label": "ผู้บริหาร (แท็บโครงสร้างสำนัก)",
+      "labelSingular": "ผู้บริหาร",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อ - นามสกุล",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "position",
+          "label": "ตำแหน่ง (ขึ้นบรรทัดใหม่ได้)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "photo",
+          "label": "รูปถ่าย (สี่เหลี่ยมจัตุรัส จะแสดงเป็นวงกลม)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับชั้น (1 = บนสุด)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "forms",
+      "label": "แบบฟอร์ม",
+      "labelSingular": "แบบฟอร์ม",
+      "supports": [
+        "drafts",
+        "revisions",
+        "scheduling"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อแบบฟอร์ม",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "doc_date",
+          "label": "วันที่ (แสดงใต้ชื่อแบบฟอร์ม ใช้เรียงลำดับ ใหม่สุดขึ้นก่อน)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "file",
+          "label": "ไฟล์แนบ (PDF, Word, Excel ฯลฯ)",
+          "type": "file",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "link",
+          "label": "ลิงก์ภายนอก (ใช้เมื่อไม่มีไฟล์แนบ)",
+          "type": "url",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "description",
+          "label": "รายละเอียดเพิ่มเติม (ไม่บังคับ)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "availability",
+          "label": "สถานะการรับ (ไม่บังคับ — เลือกเมื่ออยากให้แสดงป้าย เปิด/ปิด)",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "เปิด",
+              "ปิด"
+            ]
+          }
+        },
+        {
+          "slug": "attachments",
+          "label": "เอกสารประกอบ (แสดงเป็นข้อย่อยใต้แบบฟอร์มนี้)",
+          "type": "reference",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "targetCollection": "forms",
+            "relation": "forms_attachments",
+            "relationSide": "parent"
+          }
+        },
+        {
+          "slug": "show_new",
+          "label": "แสดงป้าย \"ใหม่\"",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "infographics",
+      "label": "ไฟล์เอกสารในหน้าเว็บ (PDF / รูปภาพ)",
+      "labelSingular": "ไฟล์เอกสาร",
+      "supports": [
+        "drafts",
+        "revisions",
+        "scheduling"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "หัวข้อ",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "doc_date",
+          "label": "วันที่ (ใช้เรียงผลการค้นหาและรายการ ใหม่สุดขึ้นก่อน)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "file",
+          "label": "ไฟล์ (PDF, PNG, JPG)",
+          "type": "file",
+          "required": true,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "image/gif"
+            ]
+          }
+        },
+        {
+          "slug": "description",
+          "label": "คำอธิบาย (ไม่บังคับ)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับการแสดง (น้อยขึ้นก่อน, เว้นว่าง = เรียงตามวันที่ล่าสุด)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "group",
+          "label": "หัวข้อกลุ่ม (ไม่บังคับ เช่น Sao Hrm Knowledge Sharing)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "tab",
+          "label": "แท็บปี (เช่น 2567 หรือ 2561 — ใช้ในหน้าคำบรรยายลักษณะงาน)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "featured_image",
+          "label": "รูปแบนเนอร์ (ใช้เมื่อปักหมุดที่ข่าวประชาสัมพันธ์ แนะนำแนวนอน 16:9)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "featured_order",
+          "label": "ปักหมุดที่ข่าวประชาสัมพันธ์ หน้าแรก: ลำดับที่ (1 = กล่องใหญ่, 2–5 = การ์ดขวา, เว้นว่าง = ไม่ปักหมุด)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_new",
+          "label": "แสดงป้าย \"ใหม่\" (ติ๊กเพื่อแสดงเอง — หรือจะขึ้นเองตามจำนวนวันที่ตั้งไว้ในข้อมูลเว็บไซต์)",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "org_units",
+      "label": "ผังโครงสร้างสำนัก (กล่องในผัง)",
+      "labelSingular": "กล่องในผังโครงสร้าง",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อกล่อง (เช่น กลุ่มสรรหา คัดเลือก และบรรจุแต่งตั้ง / ผู้อำนวยการสำนัก)",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "show_title",
+          "label": "แสดงชื่อกล่องเป็นหัวข้อ (ปิด = แสดงเฉพาะรายการตำแหน่ง เช่น กล่องนักทรัพยากรบุคคลเชี่ยวชาญ)",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "placement",
+          "label": "ตำแหน่งในผัง",
+          "type": "select",
+          "required": true,
+          "unique": false,
+          "validation": {
+            "options": [
+              "หัวผัง (บนสุด)",
+              "ซ้าย",
+              "ขวา",
+              "กลาง (ล่าง)"
+            ]
+          }
+        },
+        {
+          "slug": "positions",
+          "label": "ตำแหน่งในกล่องและจำนวนคน",
+          "type": "repeater",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "subFields": [
+              {
+                "slug": "name",
+                "label": "ชื่อตำแหน่ง (ขึ้นบรรทัดใหม่ได้)",
+                "type": "text",
+                "required": true
+              },
+              {
+                "slug": "count",
+                "label": "จำนวน (คน)",
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (น้อยขึ้นก่อน — ซ้ายและขวาจะจับคู่กันเป็นแถวตามลำดับ)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "pages",
+      "label": "Pages",
+      "labelSingular": "Page",
+      "supports": [
+        "drafts",
+        "revisions",
+        "preview",
+        "search",
+        "seo"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "content",
+          "label": "Content",
+          "type": "portableText",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "hide_from_menu",
+          "label": "ซ่อนจากเมนูหลัก",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed_url",
+          "label": "ฝังรายงาน/แดชบอร์ด: ลิงก์ embed (เช่น Looker Studio, Power BI, Google Sheets)",
+          "type": "url",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed_height",
+          "label": "ฝังรายงาน: ความสูง (พิกเซล, ค่าเริ่มต้น 1020)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed_link_text",
+          "label": "ฝังรายงาน: ข้อความลิงก์ใต้รายงาน",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed_link_url",
+          "label": "ฝังรายงาน: ลิงก์เปิดรายงานแบบเต็มหน้า",
+          "type": "url",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed_show_reset",
+          "label": "ฝังรายงาน: แสดงปุ่ม Reset ตัวกรอง",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_about_tabs",
+          "label": "แสดงแท็บ \"เกี่ยวกับเรา\" (ทำเนียบ / ผังที่นั่ง / โครงสร้าง / บุคลากร) ในหน้านี้",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed2_url",
+          "label": "รายงาน/แดชบอร์ดที่ 2: ลิงก์ (https://… หรือไฟล์ในเว็บ เช่น /dashboards/dpis6-attendance.html)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed2_height",
+          "label": "รายงานที่ 2: ความสูง (px, เว้นว่าง = 1400)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "embed2_title",
+          "label": "รายงานที่ 2: ชื่อ (ใช้อ่านออกเสียง/ลิงก์เปิดเต็มจอ)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_auditee_finder",
+          "label": "แสดงคำสั่งมอบหมายและค้นหาหน่วยรับตรวจในหน้านี้",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_structure_tabs",
+          "label": "แสดงแท็บโครงสร้าง สตง. (ส่วนราชการ / ผัง / แผนที่ภาค) ในหน้านี้",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "performance",
+      "label": "ผลการดำเนินการประจำเดือน",
+      "labelSingular": "ผลการดำเนินการ",
+      "supports": [
+        "drafts",
+        "revisions",
+        "scheduling"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "หัวข้อ",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "report_month",
+          "label": "เดือนที่รายงาน (เลือกวันใดก็ได้ในเดือนนั้น)",
+          "type": "datetime",
+          "required": true,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "video_file",
+          "label": "ไฟล์วิดีโอ (MP4) — อัปโหลดเอง",
+          "type": "file",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "video_url",
+          "label": "หรือ ลิงก์วิดีโอ (YouTube / Facebook / ไฟล์ .mp4)",
+          "type": "url",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "poster",
+          "label": "ภาพปกวิดีโอ (ไม่บังคับ)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "description",
+          "label": "คำอธิบาย",
+          "type": "text",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "posts",
+      "label": "Posts",
+      "labelSingular": "Post",
+      "supports": [
+        "drafts",
+        "revisions",
+        "preview",
+        "scheduling",
+        "search",
+        "seo"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "doc_date",
+          "label": "วันที่ (แสดงบนเว็บและใช้เรียงลำดับ ใหม่สุดขึ้นก่อน)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "attachment",
+          "label": "ไฟล์แนบ (PDF, Word, Excel ฯลฯ)",
+          "type": "file",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "attachment_link",
+          "label": "ลิงก์ไฟล์ / ลิงก์ภายนอก (ใช้เมื่อไม่ได้อัปโหลดไฟล์ เช่น Google Drive)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "content",
+          "label": "Content",
+          "type": "portableText",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "excerpt",
+          "label": "Excerpt",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "featured_image",
+          "label": "รูปภาพปกข่าว (แสดงในหน้าแรก แนะนำแนวนอน 16:9)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "featured_order",
+          "label": "ปักหมุดที่ข่าวประชาสัมพันธ์ หน้าแรก: ลำดับที่ (1 = กล่องใหญ่, 2–5 = การ์ดขวา, เว้นว่าง = ไม่ปักหมุด)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "contact_name",
+          "label": "ผู้รับผิดชอบข่าว / ผู้ประสานงาน",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "contact_phone",
+          "label": "เบอร์โทรผู้รับผิดชอบ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_new",
+          "label": "แสดงป้าย \"ใหม่\" (ติ๊กเพื่อแสดงเอง — หรือจะขึ้นเองตามจำนวนวันที่ตั้งไว้ในข้อมูลเว็บไซต์)",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "quick_links",
+      "label": "ลิงก์ระบบงาน",
+      "labelSingular": "ลิงก์ระบบงาน",
+      "supports": [
+        "drafts"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อที่แสดง",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "url",
+          "label": "ลิงก์ (URL)",
+          "type": "url",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "icon",
+          "label": "ไอคอน",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "เอกสาร",
+              "คอมพิวเตอร์",
+              "ปฏิทิน",
+              "อีเมล",
+              "อินเทอร์เน็ต",
+              "อาคาร",
+              "ผู้ใช้",
+              "ลิงก์"
+            ]
+          }
+        },
+        {
+          "slug": "icon_image",
+          "label": "รูปไอคอน (ใช้แทนไอคอนด้านบน ถ้าอัปโหลด)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับการแสดง (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "new_tab",
+          "label": "เปิดในแท็บใหม่",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "recruit_statuses",
+      "label": "สถานะประกาศรับสมัคร",
+      "labelSingular": "สถานะ",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อสถานะ (เช่น เปิดรับสมัคร)",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "color",
+          "label": "สีป้ายสถานะ",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "เขียว",
+              "เทา",
+              "ฟ้า",
+              "ม่วง",
+              "น้ำตาลทอง",
+              "ส้ม",
+              "แดง",
+              "ชมพู",
+              "เขียวอมฟ้า"
+            ]
+          }
+        },
+        {
+          "slug": "custom_color",
+          "label": "สีกำหนดเอง (รหัสสี เช่น #c62828 — ใช้แทนสีด้านบน)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับในรายการ",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "recruitments",
+      "label": "ประกาศรับสมัครสอบ",
+      "labelSingular": "ประกาศรับสมัคร",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อประกาศ",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "doc_date",
+          "label": "วันที่ประกาศ (แสดงเป็น ประกาศวันที่… และใช้เรียงลำดับ ใหม่สุดขึ้นก่อน)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "banner",
+          "label": "รูปแบนเนอร์",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "description",
+          "label": "รายละเอียด (ไม่บังคับ)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "document",
+          "label": "ไฟล์ประกาศ (PDF)",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf"
+            ]
+          }
+        },
+        {
+          "slug": "link",
+          "label": "ลิงก์ (ถ้ามี)",
+          "type": "url",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "contact_name",
+          "label": "ชื่อผู้รับผิดชอบ / ผู้ประสานงาน (ไม่บังคับ)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "contact_phone",
+          "label": "เบอร์ติดต่อ (ไม่บังคับ เช่น 0 2271 8000 ต่อ 1234)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับการแสดง (เว้นว่าง = เรียงตามวันที่ล่าสุด)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "stage",
+          "label": "สถานะ (ถ้าเลือก จะใช้สถานะนี้เสมอ — ถ้าไม่เลือกแต่ใส่วันรับสมัคร ระบบจะขึ้น เปิด/ปิดรับสมัคร เอง)",
+          "type": "reference",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "targetCollection": "recruit_statuses",
+            "relation": "recruitments_stage",
+            "relationSide": "parent"
+          }
+        },
+        {
+          "slug": "apply_start",
+          "label": "วันเริ่มรับสมัคร (ถ้าใส่ สถานะจะเปลี่ยนเป็น เปิด/ปิดรับสมัคร ตามวันที่เอง)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "apply_end",
+          "label": "วันสุดท้ายของการรับสมัคร (ถ้าใส่ สถานะจะเปลี่ยนเป็น เปิด/ปิดรับสมัคร ตามวันที่เอง)",
+          "type": "datetime",
+          "required": false,
+          "unique": false,
+          "widget": "thai-date:date"
+        },
+        {
+          "slug": "form_file_1",
+          "label": "แบบฟอร์ม (Word) ไฟล์ที่ 1 — เว้นว่างได้ ปุ่มจะใช้ชื่อไฟล์",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/msword",
+              "application/rtf",
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "application/vnd.ms-excel",
+              "application/zip"
+            ]
+          }
+        },
+        {
+          "slug": "form_file_2",
+          "label": "แบบฟอร์ม (Word) ไฟล์ที่ 2 — เว้นว่างได้ ปุ่มจะใช้ชื่อไฟล์",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/msword",
+              "application/rtf",
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "application/vnd.ms-excel",
+              "application/zip"
+            ]
+          }
+        },
+        {
+          "slug": "form_file_3",
+          "label": "แบบฟอร์ม (Word) ไฟล์ที่ 3 — เว้นว่างได้ ปุ่มจะใช้ชื่อไฟล์",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/msword",
+              "application/rtf",
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "application/vnd.ms-excel",
+              "application/zip"
+            ]
+          }
+        },
+        {
+          "slug": "form_file_4",
+          "label": "แบบฟอร์ม (Word) ไฟล์ที่ 4 — เว้นว่างได้ ปุ่มจะใช้ชื่อไฟล์",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/msword",
+              "application/rtf",
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "application/vnd.ms-excel",
+              "application/zip"
+            ]
+          }
+        },
+        {
+          "slug": "form_file_5",
+          "label": "แบบฟอร์ม (Word) ไฟล์ที่ 5 — เว้นว่างได้ ปุ่มจะใช้ชื่อไฟล์",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/msword",
+              "application/rtf",
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "application/vnd.ms-excel",
+              "application/zip"
+            ]
+          }
+        },
+        {
+          "slug": "amend_file_1",
+          "label": "ประกาศแก้ไขเพิ่มเติม ไฟล์ที่ 1 (PDF) — แสดงแยกกล่อง",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg"
+            ]
+          }
+        },
+        {
+          "slug": "amend_file_2",
+          "label": "ประกาศแก้ไขเพิ่มเติม ไฟล์ที่ 2 (PDF) — แสดงแยกกล่อง",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg"
+            ]
+          }
+        },
+        {
+          "slug": "amend_file_3",
+          "label": "ประกาศแก้ไขเพิ่มเติม ไฟล์ที่ 3 (PDF) — แสดงแยกกล่อง",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg"
+            ]
+          }
+        },
+        {
+          "slug": "year",
+          "label": "ปีงบประมาณ / ปี พ.ศ. ของประกาศ (แท็บปี เช่น 2569 — เว้นว่าง = ใช้ปีของวันเริ่มรับสมัคร)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "sao_offices",
+      "label": "ส่วนราชการ สตง. (ชื่อ / อีเมล / ผัง)",
+      "labelSingular": "ส่วนราชการ",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อภาษาไทย",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "name_en",
+          "label": "ชื่อภาษาอังกฤษ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "abbr",
+          "label": "ตัวย่อ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "email",
+          "label": "E-mail",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "category",
+          "label": "ประเภท",
+          "type": "select",
+          "required": true,
+          "unique": false,
+          "validation": {
+            "options": [
+              "สำนักสนับสนุน",
+              "สำนักตรวจสอบส่วนกลาง",
+              "สตภ. (ภูมิภาค)",
+              "สตจ. (จังหวัด)"
+            ]
+          }
+        },
+        {
+          "slug": "region",
+          "label": "ภาคที่ (เฉพาะ สตภ. / สตจ.)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "chart_boxes",
+          "label": "ผังโครงสร้าง: กล่องในผัง",
+          "type": "repeater",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "subFields": [
+              {
+                "slug": "title",
+                "label": "ชื่อกล่อง",
+                "type": "string",
+                "required": true
+              },
+              {
+                "slug": "placement",
+                "label": "ตำแหน่งในผัง",
+                "type": "select",
+                "validation": {
+                  "options": [
+                    "หัวผัง (บนสุด)",
+                    "ซ้าย",
+                    "ขวา",
+                    "กลาง (ล่าง)"
+                  ]
+                }
+              },
+              {
+                "slug": "show_title",
+                "label": "แสดงชื่อกล่องเป็นหัวข้อ",
+                "type": "boolean"
+              },
+              {
+                "slug": "positions",
+                "label": "ตำแหน่งและจำนวน (บรรทัดละ 1 ตำแหน่ง เช่น ผู้อำนวยการกลุ่ม (อำนวยการต้น) = 1)",
+                "type": "text"
+              },
+              {
+                "slug": "row",
+                "label": "แถวที่ (ซ้าย/ขวาที่เลขเดียวกันอยู่แถวเดียวกัน)",
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "chart_file",
+          "label": "ผังโครงสร้าง: ไฟล์ (PDF หรือรูป)",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          }
+        },
+        {
+          "slug": "map_x",
+          "label": "ตำแหน่งบนแผนที่: แนวนอน % (สตภ. = ปุ่มเลขภาค / สตจ. = จุดที่เส้นชี้)",
+          "type": "number",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "map_y",
+          "label": "ตำแหน่งบนแผนที่: แนวตั้ง % (สตภ. = ปุ่มเลขภาค / สตจ. = จุดที่เส้นชี้)",
+          "type": "number",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "seat_plans",
+      "label": "ผังที่นั่งและเบอร์โทร",
+      "labelSingular": "ผังที่นั่ง",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อกลุ่มงาน / ชื่อผัง",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "phone",
+          "label": "เบอร์โทรกลุ่ม (เช่น 0 2271 8000 ต่อ 1234)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "phone_list",
+          "label": "รายชื่อและเบอร์ภายใน (บรรทัดละ 1 คน เช่น นายสมชาย ใจดี — 1234)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "plan_columns",
+          "label": "ผังที่นั่ง: จำนวนคอลัมน์ของตาราง (เว้นว่าง = 12)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "plan_rows",
+          "label": "ผังที่นั่ง: จำนวนแถวของตาราง (เว้นว่าง = 11)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "seat_boxes",
+          "label": "ผังที่นั่ง: กล่องในผัง (1 กล่อง = 1 โต๊ะ / ป้าย / ลิฟท์ / กรอบห้อง)",
+          "type": "repeater",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "subFields": [
+              {
+                "slug": "label",
+                "label": "ข้อความในกล่อง (เช่น พี่มด — ขึ้นบรรทัดใหม่ได้)",
+                "type": "text"
+              },
+              {
+                "slug": "phone",
+                "label": "เบอร์โทร / เบอร์ภายใน",
+                "type": "string"
+              },
+              {
+                "slug": "color",
+                "label": "สีกล่อง",
+                "type": "select",
+                "validation": {
+                  "options": [
+                    "เทา",
+                    "ฟ้า",
+                    "เขียวมิ้นต์",
+                    "เขียว",
+                    "เหลือง",
+                    "ส้ม",
+                    "ชมพู",
+                    "ม่วง",
+                    "น้ำเงิน (ตัวอักษรขาว)",
+                    "ขาว",
+                    "ไม่มีสี"
+                  ]
+                }
+              },
+              {
+                "slug": "custom_color",
+                "label": "สีกำหนดเอง (รหัสสี เช่น #ffd6a5 — ใช้แทนสีด้านบน)",
+                "type": "string"
+              },
+              {
+                "slug": "col",
+                "label": "คอลัมน์เริ่ม (นับจากซ้าย 1, 2, 3…)",
+                "type": "integer",
+                "required": true
+              },
+              {
+                "slug": "row",
+                "label": "แถวเริ่ม (นับจากบน 1, 2, 3…)",
+                "type": "integer",
+                "required": true
+              },
+              {
+                "slug": "width",
+                "label": "กว้างกี่คอลัมน์ (เว้นว่าง = 1)",
+                "type": "integer"
+              },
+              {
+                "slug": "height",
+                "label": "สูงกี่แถว (เว้นว่าง = 1)",
+                "type": "integer"
+              },
+              {
+                "slug": "vertical",
+                "label": "เขียนข้อความแนวตั้ง",
+                "type": "boolean"
+              },
+              {
+                "slug": "text_size",
+                "label": "ขนาดตัวอักษร",
+                "type": "select",
+                "validation": {
+                  "options": [
+                    "ปกติ",
+                    "ใหญ่",
+                    "เล็ก"
+                  ]
+                }
+              },
+              {
+                "slug": "style",
+                "label": "ชนิด",
+                "type": "select",
+                "validation": {
+                  "options": [
+                    "กล่อง",
+                    "กรอบห้อง (เส้นขอบ)"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "slug": "seat_image",
+          "label": "ภาพผังที่นั่ง (ใช้เมื่อไม่ได้สร้างกล่องในผัง)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "site_info",
+      "label": "ข้อมูลเว็บไซต์ / หน้าแรก",
+      "labelSingular": "ข้อมูลเว็บไซต์",
+      "supports": [
+        "drafts"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อรายการ (สำหรับ admin)",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "hero_image",
+          "label": "ภาพหน้าแรก (Hero) — ถ้าไม่มีข้อความทั้งสองช่อง ภาพจะแสดงสีปกติไม่มีเงาทับ",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "hero_title",
+          "label": "ข้อความหัวข้อบนภาพ Hero (เว้นว่าง = ไม่แสดง)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "hero_subtitle",
+          "label": "ข้อความรองใต้หัวข้อ (เว้นว่าง = ไม่แสดง)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "org_name_en",
+          "label": "ชื่อหน่วยงานภาษาอังกฤษ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "heading_recruitments",
+          "label": "หัวข้อ: ประกาศรับสมัครสอบ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "heading_news",
+          "label": "หัวข้อ: ข่าวประชาสัมพันธ์",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "heading_documents",
+          "label": "หัวข้อ: ประกาศ คำสั่ง ระเบียบ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "heading_calendar",
+          "label": "หัวข้อ: ปฏิทินกิจกรรม",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "news_limit",
+          "label": "จำนวนข่าวที่แสดง",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "documents_limit",
+          "label": "จำนวนเอกสารที่แสดงต่อแท็บ",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "new_badge_days",
+          "label": "แสดงป้าย \"ใหม่\" อัตโนมัติกี่วันนับจากวันที่ของเรื่อง/ไฟล์ (0 = ไม่แสดงอัตโนมัติ ใช้เฉพาะที่ติ๊กเอง)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "footer_text",
+          "label": "ข้อความใน footer",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "status_badge",
+          "label": "ป้ายสถานะใน footer (เว้นว่าง = ไม่แสดง)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_visitor_counter",
+          "label": "แสดงจำนวนผู้เข้าชม",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "contact_heading",
+          "label": "หัวข้อกล่องติดต่อ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "address",
+          "label": "ที่อยู่",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "phone",
+          "label": "โทรศัพท์",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "email",
+          "label": "อีเมล",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "logo",
+          "label": "โลโก้มุมซ้ายบน (เว้นว่าง = โลโก้ HR เริ่มต้น)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "site_name",
+          "label": "ชื่อหน่วยงานข้างโลโก้ (เว้นว่าง = ชื่อเว็บไซต์ใน Settings)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "logo_shape",
+          "label": "รูปทรงโลโก้",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "วงกลม",
+              "ตามรูปต้นฉบับ"
+            ]
+          }
+        },
+        {
+          "slug": "heading_performance",
+          "label": "หัวข้อ: ผลการดำเนินการ (ชื่อเดือนจะต่อท้ายอัตโนมัติ)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "line_id",
+          "label": "LINE ID หรือชื่อบัญชี (เช่น @hrsao) — เว้นว่าง = ไม่แสดง",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "line_url",
+          "label": "ลิงก์ LINE (เช่น https://line.me/R/ti/p/@hrsao)",
+          "type": "url",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "heading_performance_tab",
+          "label": "หัวข้อแท็บผลการดำเนินการ (หน้าแรก)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_year_calendar",
+          "label": "เปิดใช้ปฏิทินรายปี (ปุ่ม “ดูทั้งหมด” ที่ปฏิทินกิจกรรม หน้าแรก)",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "calendar_note",
+          "label": "หมายเหตุใต้ปฏิทินรายปี (เว้นว่าง = ใช้ข้อความมาตรฐาน)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_entry_banners",
+          "label": "เปิดใช้ป๊อปอัพแบนเนอร์หน้าแรก (แบนเนอร์จัดการได้ที่เมนู ป๊อปอัพแบนเนอร์หน้าแรก)",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "show_welcome_popup",
+          "label": "เปิดใช้ป๊อปอัพ \"มีอะไรใหม่ในเว็บไซต์ สบท.\"",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "status_badge_color",
+          "label": "สีป้ายสถานะใน footer",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "เหลือง",
+              "เขียว",
+              "แดง",
+              "น้ำเงิน",
+              "ส้ม",
+              "ม่วง",
+              "เทา"
+            ]
+          }
+        },
+        {
+          "slug": "welcome_title",
+          "label": "ป๊อปอัพ มีอะไรใหม่: หัวข้อ (เว้นว่าง = ยินดีต้อนรับสู่เว็บไซต์ใหม่ สบท.)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "welcome_lead",
+          "label": "ป๊อปอัพ มีอะไรใหม่: ข้อความใต้หัวข้อ (เว้นว่าง = มีอะไรใหม่ในเว็บไซต์ สบท.)",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "welcome_items",
+          "label": "ป๊อปอัพ มีอะไรใหม่: รายการ (บรรทัดละ 1 ข้อ เขียนว่า หัวข้อ | คำอธิบาย — แก้แล้วป๊อปอัพจะขึ้นใหม่ให้ทุกคนเห็นอีกครั้ง)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "staff_groups",
+      "label": "บุคลากรตามกลุ่มงาน",
+      "labelSingular": "กลุ่มงาน",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อกลุ่มงาน",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "staff_members",
+          "label": "บุคลากรในกลุ่ม (คนแรกอยู่บนสุดตรงกลาง)",
+          "type": "repeater",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "subFields": [
+              {
+                "slug": "name",
+                "label": "ชื่อ - นามสกุล",
+                "type": "string",
+                "required": true
+              },
+              {
+                "slug": "position",
+                "label": "ตำแหน่ง",
+                "type": "string"
+              },
+              {
+                "slug": "phone",
+                "label": "เบอร์โทร (เช่น 1205)",
+                "type": "string"
+              },
+              {
+                "slug": "photo",
+                "label": "รูปถ่าย (สี่เหลี่ยมจัตุรัส จะแสดงเป็นวงกลม)",
+                "type": "image"
+              },
+              {
+                "slug": "row",
+                "label": "แถวที่ (เว้นว่าง = คนแรกอยู่บนสุด ที่เหลือแถวละ 3 คน)",
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "group_photo",
+          "label": "ภาพหมู่บุคลากร (ใช้เมื่อยังไม่ได้ใส่รายชื่อบุคลากรด้านล่าง)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "members",
+          "label": "รายชื่อบุคลากรใต้ภาพ (ไม่บังคับ บรรทัดละ 1 คน)",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับ (ใช้เรียงปุ่มเลือกกลุ่ม น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "structure_tabs",
+      "label": "แท็บหน้าโครงสร้าง",
+      "labelSingular": "แท็บ",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "hidden": false,
+      "fields": [
+        {
+          "slug": "title",
+          "label": "ชื่อแท็บ",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "display",
+          "label": "รูปแบบการแสดง",
+          "type": "select",
+          "required": true,
+          "unique": false,
+          "validation": {
+            "options": [
+              "เนื้อหา / รูปภาพ / PDF",
+              "ตารางส่วนราชการ: ทั้งหมด",
+              "ตารางส่วนราชการ: สำนักสนับสนุน",
+              "ตารางส่วนราชการ: สำนักตรวจสอบส่วนกลาง",
+              "แผนที่ภาค: สตภ. และ สตจ."
+            ]
+          }
+        },
+        {
+          "slug": "image",
+          "label": "รูปภาพ (แท็บแผนที่ = รูปแผนที่ประเทศไทย)",
+          "type": "image",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "content",
+          "label": "ข้อความในแท็บ (ไม่บังคับ)",
+          "type": "portableText",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "attachment",
+          "label": "ไฟล์แนบ (PDF)",
+          "type": "file",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "allowedMimeTypes": [
+              "application/pdf"
+            ]
+          }
+        },
+        {
+          "slug": "attachment_text",
+          "label": "ข้อความลิงก์ไฟล์แนบ",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "sort_order",
+          "label": "ลำดับแท็บ (น้อยขึ้นก่อน)",
+          "type": "integer",
+          "required": false,
+          "unique": false
+        }
+      ]
+    }
+  ],
+  "version": "46c6d5523af24af9"
+}

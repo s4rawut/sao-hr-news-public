@@ -1,0 +1,1067 @@
+---
+import { getEmDashCollection } from "emdash";
+import { Image, PortableText } from "emdash/ui";
+import { getSiteInfo, mediaUrl } from "../utils/site-info";
+import { adminDateTime, formatThaiDate, formatThaiDuration } from "../utils/thai-date";
+import Icon from "./Icon.astro";
+import OrgChart from "./OrgChart.astro";
+import SeatPlan from "./SeatPlan.astro";
+
+/**
+ * Tabs for the About page. Tabs come from "แท็บหน้าเกี่ยวกับเรา"; each tab's "รูปแบบการแสดง"
+ * pulls its list from "ทำเนียบผู้อำนวยการสำนัก" or "กลุ่มงานในสำนัก".
+ */
+const DEFAULT_POSITION = "ผู้อำนวยการสำนักบริหารทรัพยากรบุคคล";
+
+const STRUCTURE = "โครงสร้างสำนัก (ผู้บริหาร + ภาพ)";
+const DIRECTORS = "ทำเนียบผู้อำนวยการ";
+// These two layouts draw their own framed header instead of the plain tab heading.
+const boardLayouts = [STRUCTURE, DIRECTORS];
+
+const [tabsResult, directorsResult, seatResult, staffResult, executivesResult, orgResult, info] = await Promise.all([
+	getEmDashCollection("about_tabs", { limit: 50 }),
+	getEmDashCollection("directors", { limit: 200 }),
+	getEmDashCollection("seat_plans", { limit: 200 }),
+	getEmDashCollection("staff_groups", { limit: 200 }),
+	getEmDashCollection("executives", { limit: 20 }),
+	getEmDashCollection("org_units", { limit: 100 }),
+	getSiteInfo(),
+]);
+if (Astro.cache?.enabled) {
+	for (const r of [tabsResult, directorsResult, seatResult, staffResult, executivesResult, orgResult]) Astro.cache.set(r.cacheHint);
+}
+
+const byOrder = <T extends { data: { sort_order?: number | null; title: string } }>(list: T[]) =>
+	[...list].sort(
+		(a, b) => (a.data.sort_order ?? Infinity) - (b.data.sort_order ?? Infinity) || a.data.title.localeCompare(b.data.title, "th"),
+	);
+
+const tabs = byOrder(tabsResult.entries);
+
+// Directors: dates come from the admin picker (see adminDateTime). Someone with a start date and
+// no end date, or ticked "ปัจจุบัน", is the current director; the rest are listed newest first
+// unless a manual order is given.
+const directors = directorsResult.entries.map((d) => {
+	const start = d.data.start_date ? adminDateTime(d.data.start_date) : undefined;
+	const end = d.data.end_date ? adminDateTime(d.data.end_date) : undefined;
+	const isCurrent = !!d.data.is_current || (!!start && !end);
+	const period = start
+		? `ดำรงตำแหน่งตั้งแต่ ${formatThaiDate(start)} – ${end ? formatThaiDate(end) : "ปัจจุบัน"}`
+		: d.data.term || "";
+	return { entry: d, start, isCurrent, period, duration: start && end ? formatThaiDuration(start, end) : "" };
+});
+const current = directors.filter((d) => d.isCurrent);
+const former = directors
+	.filter((d) => !d.isCurrent)
+	.sort(
+		(a, b) =>
+			(a.entry.data.sort_order ?? Infinity) - (b.entry.data.sort_order ?? Infinity) ||
+			(b.start?.getTime() ?? 0) - (a.start?.getTime() ?? 0),
+	);
+// "ผังที่นั่งและเบอร์โทร" and "บุคลากรตามกลุ่มงาน" are separate menus, one per tab.
+const seatPlans = byOrder(seatResult.entries);
+const staffGroups = byOrder(staffResult.entries);
+
+// Structure tab: leaders top-down from "ผู้บริหาร (แท็บโครงสร้างสำนัก)".
+const leaders = byOrder(executivesResult.entries).map((e) => ({
+	id: `exec-${e.id}`,
+	name: e.data.title,
+	position: e.data.position ?? "",
+	photo: e.data.photo,
+	edit: e.edit.title,
+}));
+
+// Staff of a group laid out in rows: a person's "แถวที่" decides the row; anyone without one is
+// placed after — the very first person alone on top, then three per row.
+type StaffMember = NonNullable<(typeof staffGroups)[number]["data"]["staff_members"]>[number];
+const staffRows = (people: StaffMember[]) => {
+	const byRow = new Map<number, StaffMember[]>();
+	for (const p of people.filter((p) => p.row && p.row > 0)) byRow.set(p.row!, [...(byRow.get(p.row!) ?? []), p]);
+	const rows = [...byRow.keys()].sort((a, b) => a - b).map((k) => byRow.get(k)!);
+	const rest = people.filter((p) => !p.row || p.row <= 0);
+	if (rest.length && rows.length === 0) rows.push([rest.shift()!]);
+	for (let i = 0; i < rest.length; i += 3) rows.push(rest.slice(i, i + 3));
+	return rows;
+};
+
+// Attached PDFs open in the browser's viewer (see /files/pdf) rather than downloading.
+const attachmentUrl = (file: { meta?: Record<string, unknown> } | null | undefined) => {
+	const key = file?.meta?.storageKey;
+	return typeof key === "string" && key.toLowerCase().endsWith(".pdf") ? `/files/pdf/${encodeURIComponent(key)}` : mediaUrl(file);
+};
+
+const lines = (text?: string | null) =>
+	(text ?? "")
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean);
+const hasContent = (value: unknown) => Array.isArray(value) && value.length > 0;
+---
+
+{
+	tabs.length > 0 && (
+		<section class="about" data-about-tabs>
+
+
+			{tabs.map((tab, i) => (
+				<div class="about-panel" data-about-panel id={`panel-${tab.id}`} hidden={i !== 0}>
+					{!boardLayouts.includes(tab.data.display) && (
+						<h2 class="about-heading" {...tab.edit.title}>{tab.data.title}</h2>
+					)}
+					{!boardLayouts.includes(tab.data.display) && hasContent(tab.data.content) && (
+						<div class="about-intro">
+							<PortableText value={tab.data.content} />
+						</div>
+					)}
+					{!boardLayouts.includes(tab.data.display) && tab.data.image && (
+						<a class="about-figure" href={mediaUrl(tab.data.image)} target="_blank" rel="noopener noreferrer">
+							<Image image={tab.data.image} alt={tab.data.image.alt || tab.data.title} />
+						</a>
+					)}
+
+					{tab.data.display === STRUCTURE && (
+						<div class="dir-board">
+							<header class="dir-header">
+								<h2 {...tab.edit.title}>{tab.data.title}</h2>
+								{lines(tab.data.subtitle).map((l, n) => (n === 0 ? <p class="dir-sub">{l}</p> : <p class="dir-sub2">{l}</p>))}
+								<span class="dir-ornament" aria-hidden="true">❖ ❖ ❖</span>
+							</header>
+
+							{leaders.length > 0 && (
+								<ol class="org-chain">
+									{leaders.map((l) => (
+										<li class="org-person" id={l.id}>
+											<span class="org-photo">
+												{l.photo ? <Image image={l.photo} alt={l.name} /> : <Icon name="user" size={56} />}
+											</span>
+											<h3 {...l.edit}>{l.name}</h3>
+											{l.position && <p>{l.position}</p>}
+										</li>
+									))}
+								</ol>
+							)}
+
+							<OrgChart
+								units={orgResult.entries.map((u) => ({ ...u.data, id: u.id, edit: u.edit.title }))}
+								officeName={info.site_name || "สำนักบริหารทรัพยากรบุคคล"}
+							/>
+
+							{tab.data.image && (
+								<a class="about-figure org-figure" href={mediaUrl(tab.data.image)} target="_blank" rel="noopener noreferrer">
+									<Image image={tab.data.image} alt={tab.data.image.alt || tab.data.title} />
+								</a>
+							)}
+							{hasContent(tab.data.content) && (
+								<div class="org-note">
+									<PortableText value={tab.data.content} />
+								</div>
+							)}
+							{tab.data.attachment && (
+								<p class="about-attachment">
+									<a href={attachmentUrl(tab.data.attachment)} target="_blank" rel="noopener noreferrer">
+										<Icon name="download" size={18} />
+										<span>{tab.data.attachment_text || "ดาวน์โหลดไฟล์ PDF"}</span>
+									</a>
+								</p>
+							)}
+							{!tab.data.image && leaders.length === 0 && orgResult.entries.length === 0 && <p class="about-empty">ยังไม่มีข้อมูลโครงสร้าง</p>}
+						</div>
+					)}
+
+					{tab.data.display === DIRECTORS && (
+						<div class="dir-board">
+							<header class="dir-header">
+								{tab.data.image && (
+									<span class="dir-emblem">
+										<Image image={tab.data.image} alt={tab.data.image.alt || ""} />
+									</span>
+								)}
+								<h2 {...tab.edit.title}>{tab.data.title}</h2>
+								{lines(tab.data.subtitle).map((l, n) => (n === 0 ? <p class="dir-sub">{l}</p> : <p class="dir-sub2">{l}</p>))}
+								<span class="dir-ornament" aria-hidden="true">❖ ❖ ❖</span>
+							</header>
+							{hasContent(tab.data.content) && (
+								<div class="about-intro dir-intro">
+									<PortableText value={tab.data.content} />
+								</div>
+							)}
+
+							{directors.length === 0 && <p class="about-empty">ยังไม่มีข้อมูลทำเนียบผู้อำนวยการ</p>}
+
+							{current.map(({ entry: d, period }) => (
+								<article class="dir-current" id={`director-${d.id}`}>
+									<span class="dir-photo">
+										{d.data.photo ? <Image image={d.data.photo} alt={d.data.title} /> : <Icon name="user" size={64} />}
+									</span>
+									<div class="dir-info">
+										<span class="dir-badge">★ ผู้ดำรงตำแหน่งคนปัจจุบัน</span>
+										<h3 {...d.edit.title}>{d.data.title}</h3>
+										<p class="dir-position">{d.data.position || DEFAULT_POSITION}</p>
+										{period && (
+											<p class="dir-period">
+												<Icon name="calendar" size={15} /> {period}
+											</p>
+										)}
+									</div>
+								</article>
+							))}
+
+							{former.length > 0 && (
+								<>
+									<h3 class="dir-divider"><span>ผู้ดำรงตำแหน่งก่อนหน้า</span></h3>
+									<ol class="dir-list">
+										{former.map(({ entry: d, period, duration }) => (
+											<li class="dir-card" id={`director-${d.id}`}>
+												<span class="dir-photo">
+													{d.data.photo ? <Image image={d.data.photo} alt={d.data.title} /> : <Icon name="user" size={40} />}
+												</span>
+												<div class="dir-info">
+													<h4 {...d.edit.title}>{d.data.title}</h4>
+													<p class="dir-position">{d.data.position || DEFAULT_POSITION}</p>
+													<p class="dir-tags">
+														{period && (
+															<span class="dir-period">
+																<Icon name="calendar" size={13} /> {period}
+															</span>
+														)}
+														{duration && <span class="dir-duration">{duration}</span>}
+													</p>
+												</div>
+											</li>
+										))}
+									</ol>
+								</>
+							)}
+						</div>
+					)}
+
+					{tab.data.display === "ผังที่นั่งและเบอร์โทร" &&
+						(seatPlans.length === 0 ? (
+							<p class="about-empty">ยังไม่มีผังที่นั่ง</p>
+						) : (
+							<div class="group-list">
+								{seatPlans.map((g) => (
+									<article class="group-card" id={`seat-${g.id}`}>
+										{(g.data.seat_boxes?.length ?? 0) > 0 && (
+											<SeatPlan
+												boxes={g.data.seat_boxes!}
+												columns={g.data.plan_columns}
+												rows={g.data.plan_rows}
+												title={g.data.title}
+											/>
+										)}
+										{(g.data.seat_image && !g.data.seat_boxes?.length || lines(g.data.phone_list).length > 0) && (
+										<div class:list={["group-body", { "has-image": !!g.data.seat_image && !g.data.seat_boxes?.length }]}>
+											{g.data.seat_image && !g.data.seat_boxes?.length && (
+												<a class="about-figure" href={mediaUrl(g.data.seat_image)} target="_blank" rel="noopener noreferrer">
+													<Image image={g.data.seat_image} alt={`ผังที่นั่ง ${g.data.title}`} />
+												</a>
+											)}
+											{lines(g.data.phone_list).length > 0 && (
+												<ul class="phone-list">
+													{lines(g.data.phone_list).map((l) => (
+														<li>
+															<Icon name="phone" size={14} /> {l}
+														</li>
+													))}
+												</ul>
+											)}
+										</div>
+										)}
+									</article>
+								))}
+							</div>
+						))}
+
+					{tab.data.display === "ภาพบุคลากรแต่ละกลุ่ม" &&
+						(staffGroups.length === 0 ? (
+							<p class="about-empty">ยังไม่มีข้อมูลกลุ่มงาน</p>
+						) : (
+							<div class="staff" data-staff>
+								{staffGroups.length > 1 && (
+									<label class="staff-picker">
+										<span class="staff-picker-label">เลือกกลุ่มงาน</span>
+										<select class="staff-select" data-staff-select aria-label="เลือกกลุ่มงาน">
+											{staffGroups.map((g, i) => (
+												<option value={g.id} selected={i === 0}>
+													{g.data.title}
+												</option>
+											))}
+										</select>
+									</label>
+								)}
+								{staffGroups.map((g, i) => {
+									const rows = staffRows(g.data.staff_members ?? []);
+									return (
+										<article class="staff-group" id={`staff-${g.id}`} data-staff-panel={g.id} hidden={i !== 0}>
+											<h3 class="staff-banner" {...g.edit.title}>{g.data.title}</h3>
+											{rows.length > 0 ? (
+												rows.map((row) => (
+													<ul class="staff-row">
+														{row.map((m) => (
+															<li class="staff-person">
+																<span class="staff-photo">
+																	{m.photo ? <Image image={m.photo} alt={m.name} /> : <Icon name="user" size={56} />}
+																</span>
+																<strong>{m.name}</strong>
+																{m.position && <span>{m.position}</span>}
+																{m.phone && (
+																	<a href={`tel:${m.phone.replace(/[^\d+]/g, "")}`}>โทร. {m.phone}</a>
+																)}
+															</li>
+														))}
+													</ul>
+												))
+											) : g.data.group_photo ? (
+												<a class="about-figure" href={mediaUrl(g.data.group_photo)} target="_blank" rel="noopener noreferrer">
+													<Image image={g.data.group_photo} alt={`บุคลากร ${g.data.title}`} />
+												</a>
+											) : (
+												<p class="about-empty small">ยังไม่มีข้อมูลบุคลากร</p>
+											)}
+											{rows.length === 0 && lines(g.data.members).length > 0 && (
+												<ul class="member-list">
+													{lines(g.data.members).map((l) => (
+														<li>{l}</li>
+													))}
+												</ul>
+											)}
+										</article>
+									);
+								})}
+							</div>
+						))}
+
+					{tab.data.display === "เนื้อหา / รูปภาพ" && !tab.data.image && !hasContent(tab.data.content) && (
+						<p class="about-empty">ยังไม่มีข้อมูลในแท็บนี้</p>
+					)}
+
+					{tab.data.attachment && tab.data.display !== STRUCTURE && (
+						<p class="about-attachment">
+							<a href={attachmentUrl(tab.data.attachment)} target="_blank" rel="noopener noreferrer">
+								<Icon name="download" size={18} />
+								<span>{tab.data.attachment_text || "ดาวน์โหลดไฟล์ PDF"}</span>
+							</a>
+						</p>
+					)}
+				</div>
+			))}
+		</section>
+	)
+}
+
+<script>
+	// Group picker (dropdown) inside the staff tab.
+	document.querySelectorAll<HTMLElement>("[data-staff]").forEach((root) => {
+		const select = root.querySelector<HTMLSelectElement>("[data-staff-select]");
+		const panels = [...root.querySelectorAll<HTMLElement>("[data-staff-panel]")];
+		const show = (id: string) => {
+			if (!panels.some((p) => p.dataset.staffPanel === id)) return;
+			if (select) select.value = id;
+			panels.forEach((p) => (p.hidden = p.dataset.staffPanel !== id));
+		};
+		select?.addEventListener("change", () => show(select.value));
+		// A link to #staff-<group> (e.g. from search) selects that group.
+		const fromHash = () => {
+			const id = decodeURIComponent(location.hash.slice(1)).replace(/^staff-/, "");
+			show(id);
+		};
+		fromHash();
+		window.addEventListener("hashchange", fromHash);
+	});
+
+	document.querySelectorAll<HTMLElement>("[data-about-tabs]").forEach((root) => {
+		// The topic is chosen from the เกี่ยวกับเรา submenu in the header (links to page#tab).
+		const panels = [...root.querySelectorAll<HTMLElement>("[data-about-panel]")];
+		const show = (id: string, updateHash: boolean) => {
+			if (!panels.some((p) => p.id === `panel-${id}`)) return false;
+			for (const p of panels) p.hidden = p.id !== `panel-${id}`;
+			if (updateHash) history.replaceState(null, "", `#${id}`);
+			return true;
+		};
+		// Open the tab named in the link (e.g. /contact#seating) or the tab holding the linked item.
+		const fromHash = () => {
+			const hash = decodeURIComponent(location.hash.slice(1));
+			if (!hash || show(hash, false)) return;
+			const target = root.querySelector<HTMLElement>(`#${CSS.escape(hash)}`);
+			const panel = target?.closest<HTMLElement>("[data-about-panel]");
+			if (panel && show(panel.id.replace(/^panel-/, ""), false)) target!.scrollIntoView({ block: "start" });
+		};
+		// Switching topic from the menu jumps back to the top of the page.
+		window.addEventListener("hashchange", () => {
+			const id = decodeURIComponent(location.hash.slice(1));
+			if (panels.some((p) => p.id === `panel-${id}`)) root.scrollIntoView({ block: "start" });
+		});
+		fromHash();
+		window.addEventListener("hashchange", fromHash);
+	});
+</script>
+
+<style>
+	.about {
+		margin-top: 8px;
+		min-width: 0;
+	}
+
+	.about-picker {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-bottom: 22px;
+	}
+
+	.about-picker-label {
+		font-weight: 600;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.about-select {
+		width: 100%;
+		padding: 12px 44px 12px 18px;
+		border: 1px solid var(--color-primary);
+		border-radius: 14px;
+		background-color: var(--color-primary-soft);
+		background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%230f6f87' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+		background-repeat: no-repeat;
+		background-position: right 16px center;
+		font: inherit;
+		font-weight: 600;
+		font-size: 1rem;
+		color: var(--color-primary-dark);
+		cursor: pointer;
+		appearance: none;
+		-webkit-appearance: none;
+		transition: box-shadow 0.15s;
+	}
+
+	.about-select:hover,
+	.about-select:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px rgb(15 111 135 / 18%);
+	}
+
+	.about-panel {
+		margin-top: 8px;
+	}
+
+	.about-heading {
+		margin-top: 0;
+	}
+
+	.about-intro {
+		margin-bottom: 18px;
+	}
+
+	.about-figure {
+		display: block;
+		margin: 0 0 20px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		background: #f5f7f8;
+	}
+
+	.about-figure :global(img) {
+		display: block;
+		width: 100%;
+		height: auto;
+		margin: 0;
+	}
+
+	.about-empty {
+		padding: 28px;
+		text-align: center;
+		color: var(--color-muted);
+		border: 1px dashed var(--color-border);
+		border-radius: var(--radius);
+	}
+
+	.about-empty.small {
+		padding: 18px;
+		margin: 0;
+	}
+
+	/* ทำเนียบผู้อำนวยการ: formal board in the site colours (teal + mint frame) */
+	.dir-board {
+		--dir-main: var(--color-primary);
+		--dir-main-dark: var(--color-primary-dark);
+		--dir-frame: #4fd1a5;
+		--dir-soft: var(--color-primary-soft);
+		position: relative;
+		padding: 36px clamp(16px, 4vw, 44px) 44px;
+		border: 2px solid var(--dir-frame);
+		border-radius: 22px;
+		background:
+			radial-gradient(circle at 15% 0%, rgb(255 255 255 / 90%), transparent 45%),
+			linear-gradient(180deg, #ffffff, #eaf5f8);
+		box-shadow: inset 0 0 0 6px #fbfeff, inset 0 0 0 7px rgb(79 209 165 / 35%);
+	}
+
+	.dir-header {
+		text-align: center;
+		margin-bottom: 26px;
+	}
+
+	.dir-emblem {
+		display: block;
+		width: 96px;
+		height: 96px;
+		margin: 0 auto 12px;
+		border-radius: 50%;
+		overflow: hidden;
+		box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--dir-frame), 0 8px 20px rgb(15 46 61 / 22%);
+		background: #fff;
+	}
+
+	.dir-emblem :global(img) {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		margin: 0;
+	}
+
+	.dir-header h2 {
+		margin: 0;
+		font-size: clamp(1.5rem, 3vw, 2rem);
+		color: var(--dir-main);
+	}
+
+	.dir-sub {
+		margin: 4px 0 0;
+		font-size: 1.15rem;
+		font-weight: 700;
+		color: var(--color-text);
+	}
+
+	.dir-sub2 {
+		margin: 2px 0 0;
+		font-size: 0.9rem;
+		color: var(--color-muted);
+	}
+
+	.dir-ornament {
+		display: block;
+		margin-top: 8px;
+		font-size: 0.7rem;
+		letter-spacing: 4px;
+		color: var(--dir-frame);
+	}
+
+	.dir-intro {
+		text-align: center;
+	}
+
+	.dir-photo {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		aspect-ratio: 3 / 4;
+		overflow: hidden;
+		border-radius: 10px;
+		background: var(--dir-soft);
+		color: var(--dir-main);
+	}
+
+	.dir-photo :global(img) {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		margin: 0;
+	}
+
+	.dir-current {
+		display: flex;
+		align-items: center;
+		gap: clamp(18px, 4vw, 40px);
+		padding: 24px clamp(18px, 4vw, 44px);
+		border: 2px solid var(--dir-frame);
+		border-radius: 18px;
+		background: linear-gradient(110deg, #fff, #e8f5f9);
+		box-shadow: 0 10px 30px rgb(15 111 135 / 12%);
+		scroll-margin-top: 130px;
+	}
+
+	.dir-current .dir-photo {
+		width: 150px;
+		border: 4px solid var(--dir-frame);
+		box-shadow: 0 8px 18px rgb(0 0 0 / 18%);
+	}
+
+	.dir-badge {
+		display: inline-block;
+		padding: 4px 14px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, var(--dir-main), var(--dir-main-dark));
+		color: #fff;
+		font-size: 0.78rem;
+		font-weight: 700;
+	}
+
+	.dir-current h3 {
+		margin: 8px 0 2px;
+		font-size: clamp(1.35rem, 2.6vw, 1.75rem);
+		color: var(--dir-main);
+	}
+
+	.dir-position {
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.dir-current .dir-position {
+		font-size: 1rem;
+	}
+
+	.dir-period {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		margin: 12px 0 0;
+		padding: 6px 14px;
+		border: 1px solid var(--dir-soft);
+		border-radius: 10px;
+		background: #f1f9fb;
+		color: var(--dir-main);
+		font-size: 0.9rem;
+		font-weight: 600;
+	}
+
+	.dir-divider {
+		margin: 30px 0 22px;
+		text-align: center;
+		font-size: 1rem;
+	}
+
+	.dir-divider span {
+		display: inline-block;
+		padding: 8px 26px;
+		border: 2px solid var(--dir-frame);
+		border-radius: 999px;
+		background: linear-gradient(90deg, var(--dir-main), var(--dir-main-dark));
+		color: #fff;
+		box-shadow: 0 6px 16px rgb(15 111 135 / 28%);
+	}
+
+	.dir-list {
+		list-style: none;
+		max-width: 860px;
+		margin: 0 auto;
+		padding: 0;
+		display: grid;
+		gap: 22px;
+	}
+
+	.dir-card {
+		display: flex;
+		align-items: center;
+		gap: 20px;
+		margin: 0;
+		padding: 16px 20px;
+		border: 1px solid var(--color-border);
+		border-left: 6px solid var(--dir-main);
+		border-radius: 14px;
+		background: #fff;
+		box-shadow: 0 6px 18px rgb(15 46 61 / 7%);
+		transition: transform 0.2s, box-shadow 0.2s;
+		scroll-margin-top: 130px;
+	}
+
+	.dir-card:nth-child(even) {
+		border-left-color: var(--dir-frame);
+	}
+
+	.dir-card:hover {
+		transform: translateY(-3px);
+		box-shadow: 0 12px 26px rgb(15 46 61 / 14%);
+	}
+
+	.dir-card .dir-photo {
+		width: 110px;
+		border: 2px solid var(--dir-soft);
+	}
+
+	.dir-info {
+		min-width: 0;
+	}
+
+	.dir-card h4 {
+		margin: 0 0 2px;
+		font-size: 1.1rem;
+		color: var(--color-text);
+	}
+
+	.dir-tags {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		margin: 8px 0 0;
+	}
+
+	.dir-tags .dir-period {
+		margin: 0;
+		padding: 3px 10px;
+		font-size: 0.78rem;
+		font-weight: 500;
+		color: var(--color-primary-dark);
+	}
+
+	.dir-duration {
+		padding: 3px 10px;
+		border-radius: 999px;
+		background: #2f9e6e;
+		color: #fff;
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+
+	/* โครงสร้างสำนัก: leaders top-down */
+	.org-chain {
+		list-style: none;
+		margin: 0 auto;
+		padding: 0;
+		display: grid;
+		justify-items: center;
+		max-width: 560px;
+	}
+
+	.org-person {
+		position: relative;
+		margin: 0;
+		text-align: center;
+	}
+
+	.org-person + .org-person {
+		margin-top: 40px;
+	}
+
+	.org-photo {
+		display: grid;
+		place-items: center;
+		width: 168px;
+		height: 168px;
+		margin: 0 auto 14px;
+		padding: 4px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, var(--color-primary), #4fd1a5);
+		color: #fff;
+		box-shadow: 0 10px 24px rgb(15 111 135 / 20%);
+	}
+
+	.org-photo :global(img) {
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		object-fit: cover;
+		border-radius: 50%;
+		border: 3px solid #fff;
+	}
+
+	.org-person h3 {
+		margin: 0;
+		font-size: clamp(1.2rem, 2.4vw, 1.5rem);
+		color: var(--color-primary-dark);
+	}
+
+	.org-person p {
+		margin: 4px 0 0;
+		white-space: pre-line;
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
+
+	.org-figure {
+		margin: 36px 0 0;
+		background: #fff;
+	}
+
+	.org-note {
+		margin-top: 12px;
+		text-align: center;
+		font-style: italic;
+		font-size: 0.88rem;
+		color: var(--color-muted);
+	}
+
+	.about-attachment {
+		margin: 18px 0 0;
+		text-align: center;
+	}
+
+	.about-attachment a {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 20px;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		font-weight: 600;
+		text-decoration: none;
+		transition: background 0.2s, color 0.2s;
+	}
+
+	.about-attachment a:hover {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	/* กลุ่มงาน: banner + people in centred rows */
+	.staff-picker {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-bottom: 22px;
+		max-width: 520px;
+	}
+
+	.staff-picker-label {
+		font-weight: 600;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.staff-select {
+		width: 100%;
+		padding: 10px 40px 10px 16px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background-color: var(--color-surface);
+		/* chevron */
+		background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23335' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+		background-repeat: no-repeat;
+		background-position: right 14px center;
+		font: inherit;
+		font-weight: 600;
+		font-size: 0.95rem;
+		color: var(--color-text);
+		cursor: pointer;
+		appearance: none;
+		-webkit-appearance: none;
+		transition: border-color 0.15s, box-shadow 0.15s;
+	}
+
+	.staff-select:hover {
+		border-color: var(--color-primary);
+	}
+
+	.staff-select:focus-visible {
+		outline: none;
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px var(--color-primary-soft);
+	}
+
+	.staff-group {
+		scroll-margin-top: 130px;
+	}
+
+	.staff-banner {
+		margin: 0 0 34px;
+		padding: 16px 24px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+		color: #fff;
+		text-align: center;
+		font-size: clamp(1.15rem, 2.6vw, 1.6rem);
+	}
+
+	.staff-row {
+		list-style: none;
+		margin: 0 0 34px;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 30px 48px;
+	}
+
+	.staff-person {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 230px;
+		margin: 0;
+		text-align: center;
+		line-height: 1.5;
+	}
+
+	.staff-photo {
+		display: grid;
+		place-items: center;
+		width: 190px;
+		height: 190px;
+		margin-bottom: 12px;
+		padding: 5px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, var(--color-primary), #4fd1a5 60%, #7ed957);
+		color: #fff;
+		box-shadow: 0 10px 22px rgb(15 111 135 / 16%);
+	}
+
+	.staff-photo :global(img) {
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		object-fit: cover;
+		border-radius: 50%;
+		border: 3px solid #fff;
+		background: #fff;
+	}
+
+	.staff-person strong {
+		color: var(--color-text);
+	}
+
+	.staff-person span {
+		color: var(--color-muted);
+		font-size: 0.92rem;
+	}
+
+	.staff-person a {
+		color: var(--color-primary);
+		font-size: 0.92rem;
+		text-decoration: none;
+	}
+
+	.staff-person a:hover {
+		text-decoration: underline;
+	}
+
+	@media (max-width: 600px) {
+		.staff-row {
+			gap: 24px 12px;
+		}
+
+		.staff-person {
+			width: calc(50% - 8px);
+		}
+
+		.staff-photo {
+			width: 132px;
+			height: 132px;
+		}
+
+		.staff-banner {
+			border-radius: 18px;
+		}
+	}
+
+	/* กลุ่มงาน */
+	.group-list {
+		display: grid;
+		gap: 20px;
+	}
+
+	.group-card {
+		min-width: 0;
+		padding: 20px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius);
+		background: var(--color-surface);
+		scroll-margin-top: 130px;
+	}
+
+	.group-body.has-image {
+		display: grid;
+		grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+		gap: 20px;
+		align-items: start;
+	}
+
+	:global(.plan-scroll) + .group-body {
+		margin-top: 14px;
+	}
+
+	.group-body .about-figure {
+		margin: 0;
+	}
+
+	.phone-list,
+	.member-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 6px;
+	}
+
+	.phone-list li {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		padding: 8px 12px;
+		border-radius: var(--radius-sm);
+		background: #f5f7f8;
+	}
+
+	.phone-list li :global(svg) {
+		flex-shrink: 0;
+		color: #2f9e6e;
+	}
+
+	.member-list {
+		margin-top: 12px;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	}
+
+	.member-list li {
+		margin: 0;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 760px) {
+		.group-body.has-image {
+			grid-template-columns: 1fr;
+		}
+
+		.dir-board {
+			padding: 26px 10px 28px;
+			box-shadow: none;
+		}
+
+		.dir-current {
+			flex-direction: column;
+			text-align: center;
+			padding: 20px 14px;
+		}
+
+		.dir-current .dir-photo {
+			width: 140px;
+		}
+
+		.dir-current .dir-period {
+			font-size: 0.82rem;
+		}
+
+		.dir-list {
+			gap: 14px;
+		}
+
+		.dir-card {
+			align-items: flex-start;
+			gap: 12px;
+			padding: 12px 12px 12px 10px;
+		}
+
+		.dir-card .dir-photo {
+			width: 72px;
+		}
+
+		.dir-card h4 {
+			font-size: 1rem;
+		}
+
+		.dir-tags .dir-period {
+			align-items: flex-start;
+			font-size: 0.74rem;
+		}
+
+		.dir-tags .dir-period :global(svg) {
+			margin-top: 3px;
+			flex-shrink: 0;
+		}
+	}
+</style>

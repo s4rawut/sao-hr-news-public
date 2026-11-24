@@ -1,0 +1,101 @@
+---
+/** Embedded report (Looker Studio, Power BI, Google Sheets…) configured on a page in admin. */
+interface Props {
+	url: string;
+	height?: number;
+	title?: string;
+	linkText?: string;
+	linkUrl?: string;
+	showReset?: boolean;
+	defaultHeight?: number;
+}
+
+const { url, height, title, linkText, linkUrl, showReset, defaultHeight } = Astro.props;
+// https links, or a page served by this site itself (e.g. /dashboards/…html).
+const safeUrl = /^https:\/\//i.test(url) || /^\/(?!\/)/.test(url) ? url : undefined;
+const frameHeight = height && height > 100 ? height : (defaultHeight ?? 1020);
+---
+
+{
+	safeUrl && (
+		<section class="report" data-report>
+			<div class="frame" style={`--h: ${frameHeight}px`}>
+				<iframe
+					src={safeUrl}
+					data-src={safeUrl}
+					title={title || linkText || "รายงาน"}
+					loading="lazy"
+					allowfullscreen
+					sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
+				/>
+			</div>
+			{
+				(showReset || (linkText && linkUrl)) && (
+					<div class="report-foot">
+						{showReset && (
+							<button type="button" class="button" data-reset>
+								↻ Reset ตัวกรอง
+							</button>
+						)}
+						{linkText && linkUrl && (
+							<a href={linkUrl} target="_blank" rel="noopener noreferrer" class="report-link">
+								{linkText} ↗
+							</a>
+						)}
+					</div>
+				)
+			}
+		</section>
+	)
+}
+
+<script>
+	document.querySelectorAll<HTMLElement>("[data-report]").forEach((report) => {
+		const frame = report.querySelector<HTMLIFrameElement>("iframe");
+		report.querySelector("[data-reset]")?.addEventListener("click", () => {
+			const base = frame?.dataset.src;
+			if (!frame || !base) return;
+			frame.src = `${base}${base.includes("?") ? "&" : "?"}t=${Date.now()}`;
+		});
+	});
+</script>
+
+<style>
+	.report {
+		margin-top: 24px;
+	}
+
+	.frame {
+		overflow: hidden;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius);
+		background: var(--color-bg);
+	}
+
+	.frame iframe {
+		display: block;
+		width: 100%;
+		height: var(--h);
+		border: 0;
+	}
+
+	.report-foot {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 14px;
+		margin-top: 16px;
+		text-align: center;
+	}
+
+	.report-link {
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--color-primary);
+		text-decoration: none;
+	}
+
+	.report-link:hover {
+		text-decoration: underline;
+	}
+</style>

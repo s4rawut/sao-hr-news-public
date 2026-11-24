@@ -1,0 +1,30 @@
+---
+import type { ChartUnit } from "./OrgChart.astro";
+
+/** One box of a regional chart: optional title row with its total, then one row per position. */
+interface Props {
+	unit: ChartUnit;
+}
+const { unit } = Astro.props;
+const sum = (unit.positions ?? []).reduce((n, p) => n + (p.count ?? 0), 0);
+const posName = (name: string) => (name.includes("\n") ? name : name.replace(/\s+\((?=[^()]*\)\s*$)/, "\n("));
+---
+
+<div class="rc-box">
+	{
+		unit.show_title !== false && (
+			<div class="rc-line rc-box-head">
+				<strong>{unit.title}</strong>
+				<span>{sum}</span>
+			</div>
+		)
+	}
+	{
+		(unit.positions ?? []).map((p) => (
+			<div class="rc-line">
+				<span class="rc-pos">{posName(p.name)}</span>
+				<span>{p.count ?? ""}</span>
+			</div>
+		))
+	}
+</div>

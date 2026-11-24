@@ -1,0 +1,366 @@
+---
+import { isExternal, siteLink } from "../utils/site-link";
+import CopyLink from "./CopyLink.astro";
+import { postDate } from "../utils/post-date";
+import type { getRecruitData } from "../utils/recruit";
+import { mediaUrl } from "../utils/site-info";
+import { formatThaiDate } from "../utils/thai-date";
+import Icon from "./Icon.astro";
+import RecruitStatus from "./RecruitStatus.astro";
+
+/** Announcements, newest first: banner, status, date, details, PDF and link. */
+type Data = Awaited<ReturnType<typeof getRecruitData>>;
+interface Props {
+	entries: Data["entries"];
+	/** Show the level next to the date (used on the all-announcements list) */
+	levelOf?: Data["levelOf"];
+	stageOf: Data["stageOf"];
+}
+const { entries, levelOf, stageOf } = Astro.props;
+
+// PDFs open in the browser's viewer (see /files/pdf) instead of downloading.
+const pdfUrl = (file: { meta?: Record<string, unknown> } | null | undefined) => {
+	const key = file?.meta?.storageKey;
+	return typeof key === "string" && key.toLowerCase().endsWith(".pdf") ? `/files/pdf/${encodeURIComponent(key)}` : mediaUrl(file);
+};
+---
+
+{
+	entries.length === 0 ? (
+		<div class="card ra-empty">ยังไม่มีประกาศในระดับนี้</div>
+	) : (
+		<ol class="ra-list">
+			{entries.map((e) => {
+				const level = levelOf?.(e.data.id);
+				const pdf = e.data.document ? pdfUrl(e.data.document) : undefined;
+				// Up to five Word forms; each button is named after its file (without the extension).
+				const forms = [e.data.form_file_1, e.data.form_file_2, e.data.form_file_3, e.data.form_file_4, e.data.form_file_5]
+					.filter((f) => f && mediaUrl(f))
+					.map((f) => ({
+						url: mediaUrl(f)!,
+						filename: f!.filename ?? "",
+						name: (f!.filename ?? "แบบฟอร์ม").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim(),
+						ext: /\.(docx?|rtf)$/i.test(f!.filename ?? "") ? "Word" : (f!.filename?.split(".").pop()?.toUpperCase() ?? ""),
+					}));
+				// Amendments to the announcement get their own highlighted box.
+				const amendments = [e.data.amend_file_1, e.data.amend_file_2, e.data.amend_file_3]
+					.filter((f) => f && mediaUrl(f))
+					.map((f) => {
+						const name = (f!.filename ?? "").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+						const date = name.match(/\(([^()]*\d{4})\)\s*$/)?.[1];
+						const topic = name.replace(/\([^()]*\)\s*$/, "").replace(/^ประกาศ\s*แก้ไขเพิ่มเติม\s*/, "").trim();
+						return { url: pdfUrl(f)!, date, topic: topic ? `แก้ไขเรื่อง ${topic}` : "" };
+					});
+				return (
+					<>
+					{amendments.map((a, n) => (
+						<li class="ra-item card" id={`recruit-${e.id}-amend-${n + 1}`}>
+							<div class="ra-body">
+								<div class="ra-meta">
+									<span class="ra-amend-badge">ประกาศแก้ไขเพิ่มเติม</span>
+									{a.date && (
+										<span class="ra-amend-date">
+											<Icon name="calendar" size={14} /> ประกาศวันที่ {a.date}
+										</span>
+									)}
+								</div>
+								<h2 class="ra-title">แก้ไขเพิ่มเติม{e.data.title.replace(/^รับสมัคร/, "ประกาศรับสมัคร")}</h2>
+								<p class="ra-desc">{a.topic}</p>
+								<div class="ra-actions">
+									<a class="button" href={a.url} target="_blank" rel="noopener noreferrer">
+										<Icon name="download" size={16} /> ไฟล์ประกาศ (PDF)
+									</a>
+								</div>
+							</div>
+						</li>
+					))}
+					<li class="ra-item card" id={`recruit-${e.id}`}>
+						<div class="ra-body">
+							<div class="ra-meta">
+								<RecruitStatus stage={stageOf(e.data.id)} />
+								{stageOf(e.data.id)?.period && (
+									<span class="ra-period">
+										<Icon name="clock" size={14} /> {stageOf(e.data.id)!.periodLabel ?? "รับสมัคร"} {stageOf(e.data.id)!.period}
+									</span>
+								)}
+								{postDate(e) && (
+									<time datetime={postDate(e)!.toISOString()}>
+										<Icon name="calendar" size={14} /> ประกาศวันที่ {formatThaiDate(postDate(e)!)}
+									</time>
+								)}
+								{level && (
+									<a class="ra-level" href={`/recruitments/${encodeURIComponent(level.slug)}`}>
+										{level.typeLabel} {level.label}
+									</a>
+								)}
+								<CopyLink target={`#recruit-${e.id}`} />
+							</div>
+							<h2 class="ra-title" {...e.edit.title}>{e.data.title}</h2>
+							{e.data.description && <p class="ra-desc">{e.data.description}</p>}
+							{(e.data.contact_name?.trim() || e.data.contact_phone?.trim()) && (
+								<p class="ra-contact">
+									{e.data.contact_name?.trim() && (
+										<span><Icon name="user" size={14} /> ผู้รับผิดชอบ: {e.data.contact_name.trim()}</span>
+									)}
+									{e.data.contact_phone?.trim() && (
+										<a href={`tel:${e.data.contact_phone.replace(/ต่อ.*$/, "").replace(/[^0-9+]/g, "")}`}>
+											<Icon name="phone" size={14} /> {e.data.contact_phone.trim()}
+										</a>
+									)}
+								</p>
+							)}
+							{(pdf || e.data.link || forms.length > 0) && (
+								<div class="ra-actions">
+									{pdf && (
+										<a class="button" href={pdf} target="_blank" rel="noopener noreferrer">
+											<Icon name="download" size={16} /> ไฟล์ประกาศ (PDF)
+										</a>
+									)}
+									{e.data.link && (
+										<a class="button" href={siteLink(e.data.link)} target={isExternal(siteLink(e.data.link)) ? "_blank" : undefined} rel="noopener noreferrer">
+											<Icon name="arrow" size={16} />{" "}
+											{/forms\.gle|docs\.google\.com\/forms/.test(e.data.link) ? "สมัครออนไลน์" : "รายละเอียดเพิ่มเติม"}
+										</a>
+									)}
+								</div>
+							)}
+							{forms.length > 0 && (
+								<div class="ra-forms">
+									<span class="ra-forms-title">แบบฟอร์มประกอบการสมัคร</span>
+									<ul>
+										{forms.map((f) => (
+											<li>
+												<a href={f.url} download={f.filename}>
+													<Icon name="download" size={15} />
+													<span>{f.name}</span>
+													{f.ext && <span class="ra-ext">{f.ext}</span>}
+												</a>
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
+						</div>
+					</li>
+					</>
+				);
+			})}
+		</ol>
+	)
+}
+
+<style>
+	.ra-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 22px;
+	}
+
+	.ra-item {
+		margin: 0;
+		padding: 0;
+		overflow: hidden;
+		scroll-margin-top: 130px;
+	}
+
+	.ra-item:target {
+		box-shadow: 0 0 0 3px #4fd1a5, var(--shadow-lg);
+	}
+
+	.ra-banner {
+		display: block;
+		background: #f5f7f8;
+	}
+
+	.ra-banner :global(img) {
+		display: block;
+		width: 100%;
+		height: auto;
+		transition: transform 0.3s;
+	}
+
+	.ra-banner:hover :global(img) {
+		transform: scale(1.01);
+	}
+
+	.ra-body {
+		padding: 18px 24px 22px;
+	}
+
+	.ra-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 14px;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.ra-meta time {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+	}
+
+	.ra-level {
+		padding: 3px 12px;
+		border-radius: 999px;
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.ra-title {
+		margin: 10px 0 0;
+		font-size: 1.2rem;
+		line-height: 1.5;
+		color: var(--color-text);
+	}
+
+	.ra-desc {
+		margin: 6px 0 0;
+		white-space: pre-line;
+		color: var(--color-muted);
+	}
+
+	.ra-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		margin-top: 14px;
+	}
+
+	.ra-actions .button {
+		text-decoration: none;
+	}
+
+	.ra-empty {
+		padding: 32px;
+		text-align: center;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 600px) {
+		.ra-body {
+			padding: 14px 16px 18px;
+		}
+
+		.ra-title {
+			font-size: 1.05rem;
+		}
+	}
+
+	.ra-period {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-weight: 700;
+		color: var(--color-primary-dark);
+	}
+
+	.ra-forms {
+		margin-top: 14px;
+		padding: 12px 14px;
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		background: #fbfdfe;
+	}
+
+	.ra-forms-title {
+		display: block;
+		margin-bottom: 6px;
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: var(--color-primary-dark);
+	}
+
+	.ra-forms ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 4px;
+	}
+
+	.ra-forms a {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 8px;
+		border-radius: 8px;
+		color: var(--color-text);
+		text-decoration: none;
+		font-size: 0.9rem;
+	}
+
+	.ra-forms a:hover {
+		background: var(--color-primary-soft);
+		color: var(--color-primary);
+	}
+
+	.ra-forms a :global(svg) {
+		flex-shrink: 0;
+		color: var(--color-primary);
+	}
+
+	.ra-ext {
+		margin-left: auto;
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: #e7f0fc;
+		color: #1d63c4;
+		font-size: 0.72rem;
+		font-weight: 700;
+	}
+
+	.ra-amend-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 12px;
+		border-radius: 999px;
+		background: #fff1dc;
+		color: #c25a00;
+		font-size: 0.8rem;
+		font-weight: 700;
+	}
+
+	.ra-amend-badge::before {
+		content: "";
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.ra-amend-date {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	/* ผู้รับผิดชอบ / เบอร์ติดต่อ (optional) */
+	.ra-contact {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 18px;
+		margin: 8px 0 0;
+		font-size: 0.88rem;
+		color: var(--color-muted);
+	}
+
+	.ra-contact span,
+	.ra-contact a {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.ra-contact a {
+		color: var(--color-primary-dark);
+		font-weight: 600;
+	}
+</style>

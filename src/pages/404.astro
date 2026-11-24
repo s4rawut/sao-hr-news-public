@@ -1,0 +1,13 @@
+---
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Not Found">
+	<Breadcrumbs items={[{ label: "ไม่พบหน้า" }]} />
+	<div class="card prose">
+		<h1>ไม่พบหน้าที่ต้องการ</h1>
+		<p>หน้าที่คุณกำลังค้นหาอาจถูกย้ายหรือไม่มีอยู่แล้ว</p>
+		<a href="/">กลับหน้าหลัก</a>
+	</div>
+</Base>

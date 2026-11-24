@@ -1,0 +1,364 @@
+---
+/**
+ * Org chart: the head box on top, left/right boxes along a centre line, centre boxes at the end.
+ * Rows come from each box's "แถวที่" when given, otherwise left and right boxes pair up in order.
+ * Box and office totals are added up from the position counts.
+ */
+export interface ChartUnit {
+	id: string;
+	title: string;
+	placement: string;
+	show_title?: boolean | null;
+	positions?: { name: string; count?: number | null }[] | null;
+	row?: number | null;
+	sort_order?: number | null;
+	edit?: Record<string, unknown>;
+}
+interface Props {
+	units: ChartUnit[];
+	officeName: string;
+}
+const { units, officeName } = Astro.props;
+
+const sorted = [...units].sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity));
+const sum = (u: ChartUnit) => (u.positions ?? []).reduce((n, p) => n + (p.count ?? 0), 0);
+const total = sorted.reduce((n, u) => n + sum(u), 0);
+// Position names break before "(" like the printed charts: "ผู้อำนวยการกลุ่ม\n(อำนวยการต้น)".
+const posName = (name: string) => (name.includes("\n") ? name : name.replace(/\s+\((?=[^()]*\)\s*$)/, "\n("));
+
+const heads = sorted.filter((u) => u.placement === "หัวผัง (บนสุด)");
+const sides = sorted.filter((u) => u.placement === "ซ้าย" || u.placement === "ขวา");
+const centre = sorted.filter((u) => u.placement === "กลาง (ล่าง)");
+let rows: (readonly [ChartUnit | undefined, ChartUnit | undefined])[];
+if (sides.some((u) => u.row)) {
+	const keys = [...new Set(sides.map((u) => u.row ?? 0))].sort((a, b) => a - b);
+	rows = keys.map((k) => {
+		const inRow = sides.filter((u) => (u.row ?? 0) === k);
+		return [inRow.find((u) => u.placement === "ซ้าย"), inRow.find((u) => u.placement === "ขวา")] as const;
+	});
+} else {
+	const left = sides.filter((u) => u.placement === "ซ้าย");
+	const right = sides.filter((u) => u.placement === "ขวา");
+	rows = Array.from({ length: Math.max(left.length, right.length) }, (_, i) => [left[i], right[i]] as const);
+}
+---
+
+{
+	sorted.length > 0 && (
+		<section class="org" aria-label={`ผังโครงสร้าง ${officeName}`}>
+			<div class="org-title">
+				<span>{officeName}</span>
+				<span class="org-num">{total}</span>
+			</div>
+
+			<div class="org-tree">
+				{heads.map((u) => (
+					<div class="org-box org-head" id={`org-${u.id}`}>
+						<span class="org-head-title" {...u.edit}>{u.title}</span>
+					</div>
+				))}
+
+				<div class="org-body">
+					{rows.map(([l, r]) => (
+						<div class="org-row">
+							{[l, r].map((u, side) =>
+								u ? (
+									<div class:list={["org-box", side === 0 ? "is-left" : "is-right"]} id={`org-${u.id}`}>
+										{u.show_title && (
+											<div class="org-line org-group">
+												<strong {...u.edit}>{u.title}</strong>
+												<span class="org-count">{sum(u)}</span>
+											</div>
+										)}
+										<div class="org-positions">
+											{(u.positions ?? []).map((p) => (
+												<div class="org-line">
+													<span class="org-pos">{posName(p.name)}</span>
+													<span class="org-count">{p.count ?? ""}</span>
+												</div>
+											))}
+										</div>
+									</div>
+								) : (
+									<span class="org-gap" aria-hidden="true" />
+								),
+							)}
+						</div>
+					))}
+
+					{centre.map((u) => (
+						<div class="org-row is-centre">
+							<div class="org-box" id={`org-${u.id}`}>
+								{u.show_title && (
+									<div class="org-line org-group">
+										<strong {...u.edit}>{u.title}</strong>
+										<span class="org-count">{sum(u)}</span>
+									</div>
+								)}
+								<div class="org-positions">
+									{(u.positions ?? []).map((p) => (
+										<div class="org-line">
+											<span class="org-pos">{posName(p.name)}</span>
+											<span class="org-count">{p.count ?? ""}</span>
+										</div>
+									))}
+								</div>
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+		</section>
+	)
+}
+
+<style>
+	.org {
+		--org-line: var(--color-primary);
+		--org-gap: 56px;
+		margin-top: 40px;
+	}
+
+	.org-title {
+		display: flex;
+		align-items: stretch;
+		max-width: 720px;
+		margin: 0 auto 28px;
+		border: 2px solid var(--color-primary);
+		border-radius: 12px;
+		overflow: hidden;
+		background: var(--color-primary);
+		color: #fff;
+		font-size: clamp(1.1rem, 2.4vw, 1.4rem);
+		font-weight: 700;
+	}
+
+	.org-title > span:first-child {
+		flex: 1;
+		padding: 12px 18px;
+		text-align: center;
+	}
+
+	.org-num {
+		display: grid;
+		place-items: center;
+		min-width: 72px;
+		background: #4fd1a5;
+		color: var(--color-primary-dark);
+	}
+
+	.org-box {
+		position: relative;
+		z-index: 1;
+		border: 1.5px solid rgb(15 111 135 / 45%);
+		border-radius: 10px;
+		background: #fff;
+		box-shadow: 0 4px 14px rgb(15 46 61 / 6%);
+		overflow: visible;
+	}
+
+	.org-head {
+		width: min(320px, 100%);
+		margin: 0 auto;
+		padding: 14px 18px;
+		text-align: center;
+		background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+		border-color: transparent;
+		color: #fff;
+		font-weight: 700;
+		font-size: 1.05rem;
+		line-height: 1.5;
+	}
+
+	.org-body {
+		position: relative;
+		display: grid;
+		gap: 22px;
+		padding-top: 26px;
+	}
+
+	/* centre line, built per row so it ends at the last row's arm instead of overhanging:
+	   ::before runs from the row's top down to its arm, ::after from the arm to the next row */
+	.org-row::before,
+	.org-row::after {
+		content: "";
+		position: absolute;
+		left: 50%;
+		width: 2px;
+		transform: translateX(-50%);
+		background: var(--org-line);
+	}
+
+	.org-row::before {
+		top: 0;
+		height: 27px;
+	}
+
+	.org-row:first-child::before {
+		top: -26px;
+		height: calc(26px + 27px);
+	}
+
+	.org-row::after {
+		top: 27px;
+		bottom: -22px;
+	}
+
+	.org-row:last-child::after {
+		display: none;
+	}
+
+	/* a centre box hangs from the line by its top edge */
+	.org-row.is-centre::before {
+		height: 0;
+	}
+
+	.org-row.is-centre:first-child::before {
+		height: 26px;
+	}
+
+	.org-row {
+		position: relative;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		column-gap: var(--org-gap);
+		align-items: start;
+	}
+
+	.org-row.is-centre {
+		grid-template-columns: minmax(0, 1fr);
+		justify-items: center;
+	}
+
+	.org-row.is-centre .org-box {
+		width: min(calc(50% - var(--org-gap) / 2), 100%);
+		min-width: 300px;
+	}
+
+	/* short arm from each side box to the centre line, level with its first row */
+	.org-box.is-left::after,
+	.org-box.is-right::after {
+		content: "";
+		position: absolute;
+		top: 26px;
+		width: calc(var(--org-gap) / 2);
+		height: 2px;
+		background: var(--org-line);
+	}
+
+	.org-box.is-left::after {
+		right: calc(var(--org-gap) / -2 - 1.5px);
+	}
+
+	.org-box.is-right::after {
+		left: calc(var(--org-gap) / -2 - 1.5px);
+	}
+
+	.org-line {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 56px;
+		align-items: stretch;
+	}
+
+	.org-line > * {
+		padding: 10px 14px;
+	}
+
+	.org-count {
+		display: grid;
+		place-items: center;
+		border-left: 1.5px solid rgb(15 111 135 / 25%);
+		font-weight: 700;
+		color: var(--color-primary);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.org-group {
+		border-bottom: 1.5px solid rgb(15 111 135 / 25%);
+		background: var(--color-primary-soft);
+		border-radius: 9px 9px 0 0;
+	}
+
+	.org-group strong {
+		text-align: center;
+		color: var(--color-primary-dark);
+		font-size: 0.98rem;
+		line-height: 1.45;
+	}
+
+	.org-group .org-count {
+		background: #4fd1a5;
+		color: var(--color-primary-dark);
+		border-left-color: transparent;
+		border-radius: 0 9px 0 0;
+	}
+
+	.org-positions .org-line + .org-line {
+		border-top: 1px dashed var(--color-border);
+	}
+
+	.org-pos {
+		white-space: pre-line;
+		font-size: 0.88rem;
+		line-height: 1.5;
+		color: var(--color-text);
+	}
+
+	@media (max-width: 760px) {
+		/* one column with the line running down the left */
+		.org {
+			--org-gap: 0px;
+		}
+
+		.org-body {
+			padding-left: 22px;
+		}
+
+		.org-row::before,
+		.org-row::after {
+			left: -13px;
+			transform: none;
+		}
+
+		.org-row.is-centre::before {
+			height: 27px;
+		}
+
+		.org-row.is-centre:first-child::before {
+			height: calc(26px + 27px);
+		}
+
+		.org-row,
+		.org-row.is-centre {
+			grid-template-columns: minmax(0, 1fr);
+			row-gap: 22px;
+			justify-items: stretch;
+		}
+
+		.org-row.is-centre .org-box {
+			width: auto;
+			min-width: 0;
+		}
+
+		.org-box.is-left::after,
+		.org-box.is-right::after,
+		.org-row.is-centre .org-box::after {
+			content: "";
+			position: absolute;
+			top: 26px;
+			left: -14px;
+			right: auto;
+			width: 13px;
+			height: 2px;
+			background: var(--org-line);
+		}
+
+		.org-gap {
+			display: none;
+		}
+
+		.org-head {
+			width: 100%;
+		}
+	}
+</style>

@@ -1,0 +1,75 @@
+---
+import { withAudience } from "../utils/forms";
+
+interface Props {
+	audiences: { slug: string; label: string }[];
+	selected?: string;
+	/** Path the switch links to, e.g. "/forms" or "/forms/official" */
+	basePath: string;
+}
+
+const { audiences, selected, basePath } = Astro.props;
+---
+
+{
+	audiences.length > 0 && (
+		<nav class="audience" aria-label="กลุ่มผู้ใช้แบบฟอร์ม">
+			<span class="audience-label">แบบฟอร์มสำหรับ</span>
+			<div class="segmented">
+				{audiences.map((o) => (
+					<a
+						href={withAudience(basePath, o.slug)}
+						class:list={{ active: o.slug === selected }}
+						aria-current={o.slug === selected ? "page" : undefined}
+					>
+						{o.label}
+					</a>
+				))}
+			</div>
+		</nav>
+	)
+}
+
+<style>
+	.audience {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px 14px;
+		margin-bottom: 20px;
+	}
+
+	.audience-label {
+		font-weight: 600;
+		color: var(--color-primary-dark);
+	}
+
+	.segmented {
+		display: inline-flex;
+		flex-wrap: wrap;
+		padding: 4px;
+		gap: 4px;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		box-shadow: var(--shadow);
+	}
+
+	.segmented a {
+		padding: 8px 22px;
+		border-radius: 999px;
+		font-weight: 600;
+		font-size: 0.92rem;
+		color: var(--color-muted);
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.segmented a:hover {
+		color: var(--color-primary);
+	}
+
+	.segmented a.active {
+		background: var(--color-primary);
+		color: #fff;
+	}
+</style>

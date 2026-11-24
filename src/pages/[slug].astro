@@ -1,0 +1,93 @@
+---
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+import { getEmDashCollection, getEmDashEntry, getSeoMeta, decodeSlug, getSiteSettings } from "emdash";
+import { PortableText } from "emdash/ui";
+import AboutBanner from "../components/AboutBanner.astro";
+import AboutTabs from "../components/AboutTabs.astro";
+import AuditeeFinder from "../components/AuditeeFinder.astro";
+import StructureTabs from "../components/StructureTabs.astro";
+import FileAccordion from "../components/FileAccordion.astro";
+import ReportEmbed from "../components/ReportEmbed.astro";
+import Base from "../layouts/Base.astro";
+import { resolveStarterSiteIdentity } from "../utils/site-identity";
+
+const slug = decodeSlug(Astro.params.slug);
+
+if (!slug) {
+	return Astro.rewrite("/404");
+}
+
+const { entry: page, cacheHint } = await getEmDashEntry("pages", slug);
+
+if (!page) {
+	return Astro.rewrite("/404");
+}
+
+if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
+const { siteTitle } = resolveStarterSiteIdentity(await getSiteSettings());
+
+// Files assigned to a structure tab are shown inside that tab, not again in the list below.
+const structureTabKeys = page.data.show_structure_tabs
+	? (await getEmDashCollection("structure_tabs", { limit: 50 })).entries.flatMap((t) => [t.id, t.data.title.trim()])
+	: undefined;
+
+const seo = getSeoMeta(page, {
+	siteTitle,
+	siteUrl: Astro.url.origin,
+	path: Astro.url.pathname.replace(/\/$/, ""),
+});
+---
+
+<Base
+	title={seo.title}
+	pageTitle={seo.ogTitle}
+	description={seo.description}
+	canonical={seo.canonical}
+	content={{ collection: "pages", id: page.data.id, slug }}
+>
+	<Breadcrumbs items={[{ label: page.data.title }]} />
+	{page.data.show_about_tabs && <AboutBanner title={page.data.title} />}
+	<article class="card prose">
+		{!page.data.show_about_tabs && <h1 {...page.edit.title}>{page.data.title}</h1>}
+
+		<PortableText value={page.data.content} />
+
+		{page.data.show_about_tabs && <AboutTabs />}
+		{page.data.show_auditee_finder && <AuditeeFinder />}
+		{page.data.show_structure_tabs && <StructureTabs />}
+
+		<FileAccordion
+			pageSlug={page.id}
+			pageTitle={page.data.title}
+			openFirst={page.id !== "อินโฟกราฟิก"}
+			skipTabs={structureTabKeys}
+			hideEmpty={page.data.show_about_tabs || page.data.show_auditee_finder || page.data.show_structure_tabs}
+		/>
+
+		{
+			page.data.embed_url && (
+				<ReportEmbed
+					url={page.data.embed_url}
+					height={page.data.embed_height}
+					title={page.data.title}
+					linkText={page.data.embed_link_text}
+					linkUrl={page.data.embed_link_url}
+					showReset={page.data.embed_show_reset}
+				/>
+			)
+		}
+
+		{
+			page.data.embed2_url && (
+				<ReportEmbed
+					url={page.data.embed2_url}
+					height={page.data.embed2_height}
+					defaultHeight={1400}
+					title={page.data.embed2_title || page.data.title}
+					linkText={page.data.embed2_title ? `เปิด ${page.data.embed2_title} เต็มหน้าจอ` : "เปิดเต็มหน้าจอ"}
+					linkUrl={page.data.embed2_url}
+				/>
+			)
+		}
+	</article>
+</Base>

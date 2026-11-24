@@ -1,0 +1,42 @@
+---
+import { getTaxonomyTermsWithCacheHint } from "emdash";
+
+/**
+ * Category chips of "คลังข้อมูล" (/posts): ทั้งหมด + every category under Categories, in their
+ * admin order (ประกาศ / คำสั่ง / ระเบียบ / หลักเกณฑ์ / บันทึกข้อความ). Empty ones still show,
+ * so the full set is always visible.
+ */
+interface Props {
+	/** slug of the open category, or "" for ทั้งหมด */
+	current: string;
+}
+const { current } = Astro.props;
+const terms = await getTaxonomyTermsWithCacheHint("category");
+if (Astro.cache?.enabled) Astro.cache.set(terms.cacheHint);
+const chips = [{ href: "/posts", slug: "", label: "ทั้งหมด" }, ...terms.data.map((t) => ({ href: `/category/${encodeURIComponent(t.slug)}`, slug: t.slug, label: t.label }))];
+---
+
+<nav class="lib-chips" aria-label="หมวดหมู่คลังข้อมูล">
+	{
+		chips.map((c) => (
+			<a href={c.href} class:list={["button", { "is-active": c.slug === current }]} aria-current={c.slug === current ? "page" : undefined}>
+				{c.label}
+			</a>
+		))
+	}
+</nav>
+
+<style>
+	.lib-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 18px;
+	}
+
+	.lib-chips .button {
+		padding: 5px 14px;
+		font-size: 0.8rem;
+		text-decoration: none;
+	}
+</style>
