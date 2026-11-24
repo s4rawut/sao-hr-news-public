@@ -15,7 +15,39 @@
 
 ทั้ง `data.db` และ `uploads/` อยู่ใน repository นี้แล้ว เป็นข้อมูลจริง ณ วันที่ส่งมอบ
 
-## สิ่งที่ server ต้องมี
+## วิธีที่ง่ายที่สุด: Docker (แนะนำ)
+
+ระบบทั้งหมดอยู่ใน container เดียว ไม่ต้องติดตั้ง Node.js บน server ข้อมูล (ฐานข้อมูล ไฟล์อัปโหลด ตัวนับผู้เข้าชม) เก็บใน volume `/data` ตอนเริ่มครั้งแรก ระบบจะคัดลอกข้อมูล ณ วันที่ส่งมอบลงใน volume เอง ครั้งต่อไปจะใช้ข้อมูลใน volume ต่อ ไม่เขียนทับ
+
+ต้องมี Docker Engine 20+ (หรือ Podman) และไฟล์ `.env` ตาม `.env.example` ที่ใส่ `EMDASH_ENCRYPTION_KEY` ที่ได้รับแยกแล้ว
+
+**ทางที่ 1: โหลด image สำเร็จรูป** (ไฟล์ `hr-sao-web-amd64.tar.gz` ที่ผู้พัฒนาส่งให้ ใช้กับ server แบบ x86-64 ได้โดยไม่ต้องต่ออินเทอร์เน็ต)
+```bash
+docker load -i hr-sao-web-amd64.tar.gz
+docker run -d --name hr-sao-web --restart unless-stopped \
+  --env-file .env -e HOST=0.0.0.0 -e PORT=4321 \
+  -p 4321:4321 -v hr-sao-data:/data hr-sao-web:latest
+```
+
+**ทางที่ 2: build จาก repository นี้** (ต้องออกอินเทอร์เน็ตได้ตอน build)
+```bash
+git clone <repository-url> hr-sao-site && cd hr-sao-site
+cp .env.example .env    # แล้วแก้ค่าใน .env
+docker compose up -d --build
+```
+
+จากนั้นตั้ง reverse proxy (HTTPS) ชี้ไปที่พอร์ต 4321 ตามหัวข้อ "Reverse proxy" ด้านล่าง และตั้ง `EMDASH_SITE_URL` ใน `.env` ให้ตรงกับโดเมนจริง
+
+| งาน | คำสั่ง |
+|---|---|
+| ดู log | `docker logs -f hr-sao-web` |
+| สำรองฐานข้อมูล (ขณะระบบทำงาน) | `docker exec hr-sao-web node -e "new (require('node:sqlite').DatabaseSync)('data.db').exec(\"VACUUM INTO 'backup.db'\")" && docker cp hr-sao-web:/data/backup.db ./backup-$(date +%F).db` |
+| สำรองไฟล์อัปโหลด | `docker cp hr-sao-web:/data/uploads ./uploads-$(date +%F)` |
+| อัปเดตเป็น image ใหม่ | `docker load -i <ไฟล์ใหม่>` แล้ว `docker rm -f hr-sao-web` และรัน `docker run` เดิมอีกครั้ง (ข้อมูลใน volume `hr-sao-data` ยังอยู่) |
+
+ถ้าใช้ Docker หัวข้อ "สิ่งที่ server ต้องมี" และ "ขั้นตอนติดตั้ง" ด้านล่างข้ามได้ ส่วน "การเข้าหลังบ้านครั้งแรกบนโดเมนใหม่" ยังต้องทำ (SSH tunnel ไปที่พอร์ต 4321 ของ server เหมือนกัน)
+
+## สิ่งที่ server ต้องมี (กรณีไม่ใช้ Docker)
 
 - Node.js **22.16 ขึ้นไป** (ทดสอบกับ Node 24)
 - npm (มากับ Node.js)

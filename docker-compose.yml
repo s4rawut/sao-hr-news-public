@@ -1,0 +1,16 @@
+# Start:  docker compose up -d      (needs a .env file next to this one — copy .env.example)
+services:
+  web:
+    image: hr-sao-web:latest
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4321
+    ports:
+      - "4321:4321"
+    volumes:
+      - hr-sao-data:/data
+volumes:
+  hr-sao-data:

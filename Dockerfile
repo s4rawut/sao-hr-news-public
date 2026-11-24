@@ -1,0 +1,28 @@
+# HR SAO website (Astro + EmDash, Node.js, SQLite) — one container, data kept in the /data volume.
+FROM node:22-bookworm-slim AS build
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build && npm prune --omit=dev
+
+FROM node:22-bookworm-slim
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=4321
+WORKDIR /app
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/seed ./seed
+# content at handover time; copied into /data on the first start only
+COPY --from=build /app/data.db ./initial-data/data.db
+COPY --from=build /app/uploads ./initial-data/uploads
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown node:node /data
+USER node
+# the app reads ./data.db, ./uploads and ./data relative to the working directory
+WORKDIR /data
+VOLUME /data
+EXPOSE 4321
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["node", "/app/dist/server/entry.mjs"]
