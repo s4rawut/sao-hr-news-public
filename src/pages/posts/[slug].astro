@@ -1,6 +1,5 @@
 ---
 import { siteLink } from "../../utils/site-link";
-import CopyLink from "../../components/CopyLink.astro";
 import { postDate } from "../../utils/post-date";
 import Breadcrumbs from "../../components/Breadcrumbs.astro";
 import {
@@ -123,8 +122,6 @@ const docs = [...fieldDocs, ...contentDocs];
 				</time>
 			)
 		}
-
-		<div class="post-copy"><CopyLink /></div>
 
 		{
 			categories.length > 0 && (

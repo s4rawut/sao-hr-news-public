@@ -1,5 +1,4 @@
 ---
-import CopyLink from "./CopyLink.astro";
 import { showNewBadge } from "../utils/post-date";
 import { getSiteInfo } from "../utils/site-info";
 import { byPostDate } from "../utils/post-date";
@@ -153,7 +152,6 @@ const hasContent = items.length > 0 || !!tabLayout;
 						<span class="acc-chevron" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
 					</summary>
 					<div class="acc-body">
-						<div class="acc-copy"><CopyLink target={`#info-${entry.id}`} /></div>
 						{entry.data.description && <p class="acc-desc">{entry.data.description}</p>}
 						{!url ? (
 							<p class="acc-desc">ยังไม่ได้แนบไฟล์</p>
@@ -539,11 +537,5 @@ const hasContent = items.length > 0 || !!tabLayout;
 		height: 6px;
 		border-radius: 50%;
 		background: currentColor;
-	}
-
-	.acc-copy {
-		display: flex;
-		justify-content: flex-end;
-		margin-bottom: 8px;
 	}
 </style>
