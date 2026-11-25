@@ -31,11 +31,11 @@ const years = [...new Set(level.entries.map(yearOf).filter((y): y is number => !
 const noYear = level.entries.filter((e) => !yearOf(e));
 // Banner per level, drawn in the page (no image to maintain): colour and icon follow the position
 // type, so a new level added in the admin gets one automatically. Same colours as the type boxes in
-// RecruitLevels.astro: บริหาร ฟ้า, อำนวยการ ทอง, วิชาการ น้ำเงิน, ทั่วไป ม่วง.
+// RecruitLevels.astro: บริหาร ฟ้า, อำนวยการ ทอง, วิชาการ เขียว, ทั่วไป ม่วง.
 const THEMES: Record<string, { c1: string; c2: string; acc: string; icon: string }> = {
 	executive: { c1: "#0284c7", c2: "#075985", acc: "#ffd166", icon: "crown" },
 	director: { c1: "#b8860b", c2: "#7a5200", acc: "#fff3c4", icon: "team" },
-	academic: { c1: "#1e40af", c2: "#172554", acc: "#ffd166", icon: "book" },
+	academic: { c1: "#15803d", c2: "#14532d", acc: "#ffd166", icon: "book" },
 	general: { c1: "#7c3aed", c2: "#4c1d95", acc: "#ffd166", icon: "gear" },
 };
 const theme = THEMES[level.typeSlug] ?? THEMES.academic;
