@@ -43,7 +43,9 @@ docker compose up -d --build
 | ดู log | `docker logs -f hr-sao-web` |
 | สำรองฐานข้อมูล (ขณะระบบทำงาน) | `docker exec hr-sao-web node -e "new (require('node:sqlite').DatabaseSync)('data.db').exec(\"VACUUM INTO 'backup.db'\")" && docker cp hr-sao-web:/data/backup.db ./backup-$(date +%F).db` |
 | สำรองไฟล์อัปโหลด | `docker cp hr-sao-web:/data/uploads ./uploads-$(date +%F)` |
-| อัปเดตเป็น image ใหม่ | `docker load -i <ไฟล์ใหม่>` แล้ว `docker rm -f hr-sao-web` และรัน `docker run` เดิมอีกครั้ง (ข้อมูลใน volume `hr-sao-data` ยังอยู่) |
+| อัปเดตเป็นรุ่นใหม่ (patch) | ทำตามไฟล์ `วิธีอัปเดต-patch-<รุ่น>.txt` ที่ส่งมากับ patch: สำรองข้อมูล → `docker load` → `docker rm -f hr-sao-web` → `docker run` เดิมโดยใช้ tag รุ่นใหม่ ข้อมูลใน volume `hr-sao-data` ยังอยู่ |
+
+**Patch และการเปลี่ยนฐานข้อมูล:** ถ้ารุ่นใหม่ต้องปรับข้อมูลในฐานข้อมูลด้วย (เช่น ลำดับรายการ) จะมีไฟล์ใน `patches/` ซึ่ง container รันให้เองตอนเริ่ม ไฟล์ละครั้งเดียว และเปลี่ยนเฉพาะรายการที่ระบุ ไม่ลบหรือเขียนทับข้อมูลที่ผู้ดูแลเพิ่มไว้ ดูผลได้จาก `docker logs` (บรรทัด `apply-patches`) และดูรุ่นที่ใช้อยู่ได้จากบรรทัด `HR SAO website version` รายการเปลี่ยนแปลงแต่ละรุ่นอยู่ใน `CHANGELOG.md` ถ้าไม่ใช้ Docker ให้หยุดเว็บแล้วรัน `node scripts/apply-patches.mjs` ในโฟลเดอร์เว็บหลัง `git pull` และ build
 
 ถ้าใช้ Docker หัวข้อ "สิ่งที่ server ต้องมี" และ "ขั้นตอนติดตั้ง" ด้านล่างข้ามได้ ส่วน "การเข้าหลังบ้านครั้งแรกบนโดเมนใหม่" ยังต้องทำ (SSH tunnel ไปที่พอร์ต 4321 ของ server เหมือนกัน)
 
