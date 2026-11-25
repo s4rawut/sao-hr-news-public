@@ -15,7 +15,7 @@ const { types, stageOf } = Astro.props;
 const levels = types.flatMap((t) => t.levels);
 // Inside each type box: levels with announcements come before empty ones; among them the newest
 // "วันที่ประกาศ" (any of their announcements) first. Equal or missing dates keep the order set in
-// admin → ประเภท / ระดับตำแหน่ง (e.g. ระดับสูง before ระดับต้น).
+// admin → ประเภท / ระดับตำแหน่ง (e.g. บริหาร: ระดับต้น, ระดับสูง; วิชาการ: ปฏิบัติการ … ทรงคุณวุฒิ).
 // status rank of a level's latest announcement (1 = เปิดรับสมัคร) — used for the green "open" card
 const stageRank = (l: (typeof levels)[number]) => {
 	const latest = l.entries[0];
@@ -98,6 +98,7 @@ const byStatus = (list: typeof levels) =>
 	document.querySelectorAll<HTMLElement>("[data-recruit-levels]").forEach((root) => {
 		const buttons = root.querySelectorAll<HTMLButtonElement>(".rl-switch button");
 		const groups = root.querySelectorAll<HTMLElement>(".rl-group");
+		const box = root.querySelector<HTMLElement>(".rl-groups");
 		buttons.forEach((b) =>
 			b.addEventListener("click", () => {
 				const type = b.dataset.type;
@@ -107,6 +108,7 @@ const byStatus = (list: typeof levels) =>
 					x.setAttribute("aria-pressed", String(x === b));
 				});
 				groups.forEach((g) => (g.hidden = !!type && g.dataset.type !== type));
+				box?.classList.toggle("is-filtered", !!type);
 			}),
 		);
 	});
@@ -126,10 +128,43 @@ const byStatus = (list: typeof levels) =>
 		font-size: 0.8rem;
 	}
 
+	/* บริหาร (left) and อำนวยการ (right) share a row; every other type takes the full width.
+	   Uses the type slugs from admin → ประเภท / ระดับตำแหน่ง (executive, director, academic). */
 	.rl-groups {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 18px;
+	}
+
+	.rl-group {
+		grid-column: 1 / -1;
+	}
+
+	.rl-group[data-type="executive"],
+	.rl-group[data-type="director"] {
+		grid-column: auto;
+	}
+
+	/* one type picked in the switch: it gets the full width */
+	.rl-groups.is-filtered .rl-group {
+		grid-column: 1 / -1;
+	}
+
+	/* วิชาการ: its five levels in one row */
+	.rl-group[data-type="academic"] .rl-grid {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+	}
+
+	@media (max-width: 1000px) {
+		.rl-group[data-type="academic"] .rl-grid {
+			grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+		}
+	}
+
+	@media (max-width: 760px) {
+		.rl-groups {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 
 	/* each position type is its own box */
@@ -239,7 +274,8 @@ const byStatus = (list: typeof levels) =>
 	}
 
 	@media (max-width: 600px) {
-		.rl-grid {
+		.rl-grid,
+		.rl-group[data-type="academic"] .rl-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 10px;
 		}

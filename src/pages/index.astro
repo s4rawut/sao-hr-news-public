@@ -531,6 +531,7 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 							{postAudiences.map((a, i) => (
 								<button type="button" class:list={{ "is-active": i === 0 }} data-aud={a.slug} aria-pressed={i === 0 ? "true" : "false"}>
 									{a.label}
+									<span class="aud-badge" data-aud-badge hidden></span>
 								</button>
 							))}
 						</span>
@@ -550,7 +551,7 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 						<ul class="item-list" data-docs-list>
 							{
 								docs.map(({ post, category, audiences }) => (
-									<li data-cat={category?.slug ?? ""} data-aud={audiences.join(" ")}>
+									<li data-cat={category?.slug ?? ""} data-aud={audiences.join(" ")} data-id={post.id} data-new={showNewBadge(post, info.new_badge_days, now.getTime()) ? "" : undefined}>
 										<a href={`/posts/${post.id}`}>
 											<span>
 												<span class="item-meta">
@@ -815,16 +816,47 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 				layout();
 			}),
 		);
+		// New-item bubble on a group button: counts the "ใหม่" posts ticked for that group that this
+		// browser has not opened the group for yet. Opening the group clears it (remembered per browser).
+		const seenKey = (slug: string) => `hr-docs-seen-${slug}`;
+		const readSeen = (slug: string): string[] => {
+			try {
+				return JSON.parse(localStorage.getItem(seenKey(slug)) || "[]");
+			} catch {
+				return [];
+			}
+		};
+		const newFor = (slug: string) =>
+			items.filter((li) => li.hasAttribute("data-new") && (li.dataset.aud ?? "").split(" ").includes(slug)).map((li) => li.dataset.id!);
+		const markSeen = (slug: string) => {
+			try {
+				localStorage.setItem(seenKey(slug), JSON.stringify(newFor(slug)));
+			} catch {
+				// private mode: the bubble just comes back next visit
+			}
+		};
+		const updateBadges = () =>
+			audButtons.forEach((b) => {
+				const slug = b.dataset.aud ?? "";
+				const badge = b.querySelector<HTMLElement>("[data-aud-badge]");
+				if (!badge) return;
+				const seen = readSeen(slug);
+				const unseen = slug === aud ? 0 : newFor(slug).filter((id) => !seen.includes(id)).length;
+				badge.hidden = unseen === 0;
+				badge.textContent = String(unseen);
+				b.title = unseen ? `มีเรื่องใหม่ ${unseen} เรื่อง` : "";
+			});
+		if (aud) markSeen(aud);
+		updateBadges();
 		audButtons.forEach((b) =>
 			b.addEventListener("click", () => {
 				aud = b.dataset.aud ?? "";
-				// ดูทั้งหมด opens the full list on the same group
-				const seeAll = section.querySelector<HTMLAnchorElement>("[data-docs-see-all]");
-				if (seeAll) seeAll.href = b === audButtons[0] ? "/posts" : `/posts#for-${encodeURIComponent(aud)}`;
+				markSeen(aud);
 				audButtons.forEach((x) => {
 					x.classList.toggle("is-active", x === b);
 					x.setAttribute("aria-pressed", String(x === b));
 				});
+				updateBadges();
 				layout();
 			}),
 		);
@@ -2053,6 +2085,45 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 	.docs-aud button.is-active {
 		background: var(--color-primary);
 		color: #fff;
+	}
+
+	/* new-item bubble on a group the visitor has not opened yet */
+	.docs-aud button {
+		position: relative;
+	}
+
+	.aud-badge {
+		position: absolute;
+		top: -9px;
+		right: -6px;
+		min-width: 18px;
+		height: 18px;
+		padding: 0 5px;
+		border-radius: 999px;
+		background: #e5383b;
+		color: #fff;
+		font-size: 0.68rem;
+		font-weight: 700;
+		line-height: 18px;
+		text-align: center;
+		box-shadow: 0 0 0 2px var(--color-surface);
+		animation: aud-pop 0.5s ease-out 0.4s 2 alternate;
+	}
+
+	.aud-badge[hidden] {
+		display: none;
+	}
+
+	@keyframes aud-pop {
+		to {
+			transform: scale(1.3);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.aud-badge {
+			animation: none;
+		}
 	}
 
 	/* all six categories on one line in the narrow column */
