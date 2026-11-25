@@ -8,7 +8,7 @@ if [ ! -f data.db ]; then
 	cp /app/initial-data/data.db data.db
 	mkdir -p uploads && cp -R /app/initial-data/uploads/. uploads/
 fi
-mkdir -p uploads data
+mkdir -p uploads data sessions
 # database patches that come with this version (each runs once; see patches/README.md)
 node --no-warnings /app/scripts/apply-patches.mjs /app/patches
 if [ -z "$EMDASH_ENCRYPTION_KEY" ]; then

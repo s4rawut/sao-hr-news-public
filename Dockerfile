@@ -23,7 +23,11 @@ COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/data.db ./initial-data/data.db
 COPY --from=build /app/uploads ./initial-data/uploads
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown node:node /data
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown node:node /data \
+	# admin sign-in sessions: Astro writes them to node_modules/.astro/sessions (read-only for the node
+	# user), so point that at the volume; sessions also survive updating to a new image
+	&& mkdir -p /app/node_modules/.astro && rm -rf /app/node_modules/.astro/sessions \
+	&& ln -s /data/sessions /app/node_modules/.astro/sessions
 USER node
 # the app reads ./data.db, ./uploads and ./data relative to the working directory
 WORKDIR /data
