@@ -170,10 +170,44 @@ const byStatus = (list: typeof levels) =>
 	/* each position type is its own box */
 	.rl-group {
 		padding: 18px 20px 20px;
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
+		background: var(--type-tint, var(--color-surface));
+		border: 1px solid var(--type-line, var(--color-border));
+		border-top: 4px solid var(--type-main, var(--color-border));
 		border-radius: 18px;
 		box-shadow: var(--shadow);
+	}
+
+	/* colour per position type (slugs from admin → ประเภท / ระดับตำแหน่ง); the level pages use the same */
+	.rl-group[data-type="executive"] {
+		/* ฟ้า */
+		--type-main: #0ea5e9;
+		--type-dark: #0369a1;
+		--type-tint: #f0f9ff;
+		--type-line: #bae6fd;
+	}
+
+	.rl-group[data-type="director"] {
+		/* ทอง */
+		--type-main: #c9a227;
+		--type-dark: #8a6a00;
+		--type-tint: #fdf8e7;
+		--type-line: #efdc9b;
+	}
+
+	.rl-group[data-type="academic"] {
+		/* น้ำเงิน */
+		--type-main: #1e40af;
+		--type-dark: #1e3a8a;
+		--type-tint: #eef2ff;
+		--type-line: #c7d2fe;
+	}
+
+	.rl-group[data-type="general"] {
+		/* ม่วง */
+		--type-main: #7c3aed;
+		--type-dark: #5b21b6;
+		--type-tint: #f5f3ff;
+		--type-line: #ddd6fe;
 	}
 
 	.rl-open {
@@ -202,7 +236,7 @@ const byStatus = (list: typeof levels) =>
 		margin: 0 0 14px;
 		font-size: 1.05rem;
 		font-weight: 700;
-		color: var(--color-primary-dark);
+		color: var(--type-dark, var(--color-primary-dark));
 	}
 
 	.rl-group-title::before {
@@ -210,7 +244,7 @@ const byStatus = (list: typeof levels) =>
 		width: 4px;
 		height: 1.1em;
 		border-radius: 2px;
-		background: var(--color-accent);
+		background: var(--type-main, var(--color-accent));
 	}
 
 	.rl-grid {
@@ -234,9 +268,13 @@ const byStatus = (list: typeof levels) =>
 		transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
 	}
 
+	.rl-card {
+		border-color: var(--type-line, var(--color-border));
+	}
+
 	.rl-card:hover {
 		transform: translateY(-2px);
-		border-color: var(--color-accent);
+		border-color: var(--type-main, var(--color-accent));
 		box-shadow: var(--shadow);
 	}
 
@@ -244,7 +282,7 @@ const byStatus = (list: typeof levels) =>
 		font-size: 1.02rem;
 		font-weight: 700;
 		line-height: 1.35;
-		color: var(--color-primary-dark);
+		color: var(--type-dark, var(--color-primary-dark));
 	}
 
 	.rl-meta {
