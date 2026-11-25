@@ -1,5 +1,6 @@
 ---
 import { isExternal, siteLink } from "../utils/site-link";
+import CopyLink from "./CopyLink.astro";
 import { postDate } from "../utils/post-date";
 import type { getRecruitData } from "../utils/recruit";
 import { mediaUrl } from "../utils/site-info";
@@ -92,6 +93,7 @@ const pdfUrl = (file: { meta?: Record<string, unknown> } | null | undefined) => 
 										{level.typeLabel} {level.label}
 									</a>
 								)}
+								<CopyLink target={`#recruit-${e.id}`} />
 							</div>
 							<h2 class="ra-title" {...e.edit.title}>{e.data.title}</h2>
 							{e.data.description && <p class="ra-desc">{e.data.description}</p>}

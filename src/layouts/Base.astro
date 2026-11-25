@@ -489,6 +489,40 @@ const badgeColor = BADGE_COLORS[info.status_badge_color as string] ?? BADGE_COLO
 
 			if (location.pathname === "/search") setOpen(false);
 		</script>
+		<script>
+			// "คัดลอกลิงก์" buttons (CopyLink.astro): copy this page's address + the item's anchor
+			document.addEventListener("click", async (e) => {
+				const btn = (e.target as Element).closest<HTMLButtonElement>("[data-copy-link]");
+				if (!btn) return;
+				e.preventDefault();
+				e.stopPropagation();
+				const target = btn.dataset.copyLink || "";
+				const url = target.startsWith("#") ? location.origin + location.pathname + target : new URL(target || location.href, location.href).href;
+				let ok = false;
+				try {
+					await navigator.clipboard.writeText(url);
+					ok = true;
+				} catch {
+					const box = document.createElement("textarea");
+					box.value = url;
+					box.style.position = "fixed";
+					box.style.opacity = "0";
+					document.body.appendChild(box);
+					box.select();
+					ok = document.execCommand("copy");
+					box.remove();
+				}
+				const label = btn.querySelector("[data-copy-label]");
+				if (!label) return;
+				const before = label.textContent;
+				label.textContent = ok ? "คัดลอกแล้ว ✓" : url;
+				btn.classList.toggle("is-copied", ok);
+				setTimeout(() => {
+					label.textContent = before;
+					btn.classList.remove("is-copied");
+				}, 1800);
+			});
+		</script>
 	</body>
 </html>
 
