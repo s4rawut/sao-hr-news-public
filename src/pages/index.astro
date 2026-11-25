@@ -103,7 +103,7 @@ const categoryByEntry = await getTermsForEntries(
 	docsResult.entries.map((p) => p.data.id),
 	"category",
 );
-// a post with no กลุ่มผู้ใช้ ticked is for everyone, so it shows under both ข้าราชการ and ลูกจ้าง
+// กลุ่มผู้ใช้ of each post: ลูกจ้าง shows only posts ticked ลูกจ้าง; ข้าราชการ also shows posts with none ticked
 const audienceByEntry = await getTermsForEntries(
 	"posts",
 	docsResult.entries.map((p) => p.data.id),
@@ -750,11 +750,17 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		const pager = section.querySelector<HTMLElement>("[data-docs-pager]")!;
 		const info = section.querySelector<HTMLElement>("[data-pg-info]")!;
 		const [prev, next] = [...pager.querySelectorAll<HTMLButtonElement>("[data-pg-step]")];
-		let filter = (buttons.find((b) => b.hasAttribute("data-default")) ?? buttons[0])?.dataset.filter ?? "";
-		// ข้าราชการ / ลูกจ้าง switch beside the heading; posts with no group ticked show under both
+		const defaultFilter = (buttons.find((b) => b.hasAttribute("data-default")) ?? buttons[0])?.dataset.filter ?? "";
+		let filter = defaultFilter;
+		// ข้าราชการ / ลูกจ้าง switch beside the heading. The first group (ข้าราชการ) shows posts ticked
+		// for it plus posts with no group ticked; any other group (ลูกจ้าง) shows only posts ticked for it.
 		const audButtons = [...section.querySelectorAll<HTMLButtonElement>("[data-aud]")].filter((b) => b.tagName === "BUTTON");
-		let aud = audButtons[0]?.dataset.aud ?? "";
-		const forAud = (li: HTMLElement) => !aud || !li.dataset.aud || li.dataset.aud.split(" ").includes(aud);
+		const firstAud = audButtons[0]?.dataset.aud ?? "";
+		let aud = firstAud;
+		const forAud = (li: HTMLElement, slug = aud) => {
+			const groups = (li.dataset.aud ?? "").split(" ").filter(Boolean);
+			return !slug || groups.includes(slug) || (slug === firstAud && groups.length === 0);
+		};
 		let pages: HTMLLIElement[][] = [];
 		let page = 0;
 
@@ -806,13 +812,19 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 			showPage(keepPage ? page : 0);
 		};
 
+		const selectChip = (slug: string) => {
+			filter = slug;
+			buttons.forEach((x) => {
+				x.classList.toggle("is-active", x.dataset.filter === slug);
+				x.setAttribute("aria-selected", String(x.dataset.filter === slug));
+			});
+		};
+		// chips with nothing for the chosen group are dimmed (still clickable)
+		const markChips = () =>
+			buttons.forEach((x) => x.classList.toggle("is-empty", !items.some((li) => li.dataset.cat === x.dataset.filter && forAud(li))));
 		buttons.forEach((b) =>
 			b.addEventListener("click", () => {
-				filter = b.dataset.filter ?? "";
-				buttons.forEach((x) => {
-					x.classList.toggle("is-active", x === b);
-					x.setAttribute("aria-selected", String(x === b));
-				});
+				selectChip(b.dataset.filter ?? "");
 				layout();
 			}),
 		);
@@ -856,12 +868,21 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 					x.classList.toggle("is-active", x === b);
 					x.setAttribute("aria-pressed", String(x === b));
 				});
+				// back to ข้าราชการ: the usual chip (คำสั่ง). Another group with nothing in the open chip:
+				// jump to the chip of its newest post (e.g. ลูกจ้าง → ระเบียบ)
+				if (aud === firstAud) selectChip(defaultFilter);
+				else if (!items.some((li) => li.dataset.cat === filter && forAud(li))) {
+					const first = items.find((li) => li.dataset.cat && forAud(li));
+					if (first) selectChip(first.dataset.cat!);
+				}
+				markChips();
 				updateBadges();
 				layout();
 			}),
 		);
 		prev.addEventListener("click", () => showPage(page - 1));
 		next.addEventListener("click", () => showPage(page + 1));
+		markChips();
 		layout();
 		// the news column settles once images load / the window changes size
 		let t = 0;
@@ -2124,6 +2145,11 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		.aud-badge {
 			animation: none;
 		}
+	}
+
+	/* a category with nothing for the chosen ข้าราชการ / ลูกจ้าง group */
+	.hg-docs .tabs .button.is-empty:not(.is-active) {
+		opacity: 0.45;
 	}
 
 	/* all six categories on one line in the narrow column */
