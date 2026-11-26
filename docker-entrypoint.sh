@@ -2,6 +2,7 @@
 set -e
 cd /data
 echo "HR SAO website version ${APP_VERSION:-dev}"
+echo "Site URL: ${EMDASH_SITE_URL:-(taken from each request)}"
 # first start: put the handover content into the volume (later starts keep the live data)
 if [ ! -f data.db ]; then
 	echo "First start: copying initial content into /data"

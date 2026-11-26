@@ -38,6 +38,8 @@ docker compose up -d --build
 
 จากนั้นตั้ง reverse proxy (HTTPS) ชี้ไปที่พอร์ต 4321 ตามหัวข้อ "Reverse proxy" ด้านล่าง และตั้ง `EMDASH_SITE_URL` ใน `.env` ให้ตรงกับโดเมนจริง
 
+**ที่อยู่เว็บ (`EMDASH_SITE_URL`):** ตั้งแต่รุ่น 2569-11-26 image ที่ส่งให้ IT มีค่าเริ่มต้น `https://dev-hr-sao.audit.go.th` อยู่แล้ว ถ้าใน `.env` มีบรรทัด `EMDASH_SITE_URL` ค่าใน `.env` จะใช้แทน ถ้าตั้งเป็นค่าว่าง (`EMDASH_SITE_URL=`) ระบบจะใช้โดเมนที่ผู้ใช้เปิดเข้ามาเอง (เฉพาะโดเมนใต้ `audit.go.th`) ซึ่ง proxy ต้องส่ง `Host` หรือ `X-Forwarded-Host` และ `X-Forwarded-Proto` มาด้วย ดูค่าที่ใช้อยู่ได้จากบรรทัด `Site URL:` ใน `docker logs`
+
 | งาน | คำสั่ง |
 |---|---|
 | ดู log | `docker logs -f hr-sao-web` |

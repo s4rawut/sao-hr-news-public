@@ -29,4 +29,14 @@ export default defineConfig({
 		}),
 	],
 	devToolbar: { enabled: false },
+	// โดเมนที่เชื่อถือได้: ให้ระบบใช้โดเมนที่ผู้ใช้เปิดเข้ามา (Host / X-Forwarded-Host / X-Forwarded-Proto จาก reverse proxy)
+	// แทนการเด้งไป http://localhost:4321 เมื่อไม่ได้ตั้ง EMDASH_SITE_URL (ถ้าตั้งไว้ ค่าใน .env มีผลก่อน)
+	security: {
+		allowedDomains: [
+			{ hostname: "audit.go.th" },
+			{ hostname: "**.audit.go.th" },
+			{ hostname: "localhost" },
+			{ hostname: "127.0.0.1" },
+		],
+	},
 });
