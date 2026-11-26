@@ -6,7 +6,7 @@
 //
 // Run in the folder that holds data.db (in the container: /data, the default working directory):
 //   node admin-login-link.mjs [site-url] [email]
-// site-url defaults to EMDASH_SITE_URL; email defaults to the only active admin that is not the
+// site-url defaults to EMDASH_SITE_URL, then FALLBACK_SITE_URL (give the new address after a domain change); email defaults to the only active admin that is not the
 // development account.
 import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
@@ -22,7 +22,7 @@ const fail = (msg) => {
 	process.exit(1);
 };
 
-const site = siteArg || process.env.EMDASH_SITE_URL || process.env.SITE_URL;
+const site = siteArg || process.env.EMDASH_SITE_URL || process.env.SITE_URL || process.env.FALLBACK_SITE_URL;
 if (!site || !URL.canParse(site)) fail("give the site address, e.g. https://dev-hr-sao.audit.go.th (or set EMDASH_SITE_URL)");
 const origin = new URL(site);
 const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);

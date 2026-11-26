@@ -12,10 +12,11 @@ ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION
 LABEL org.opencontainers.image.version=$APP_VERSION
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=4321
-# public address used for admin sign-in and passkeys when .env does not set EMDASH_SITE_URL
-# (empty = take the domain from the request, via astro.config.mjs security.allowedDomains)
+# the site uses the domain each request was opened with (scripts/public-origin.mjs + astro.config.mjs
+# security.allowedDomains); FALLBACK_SITE_URL is used only when the proxy does not pass the domain on.
+# EMDASH_SITE_URL in .env, when set, overrides both.
 ARG DEFAULT_SITE_URL=
-ENV EMDASH_SITE_URL=$DEFAULT_SITE_URL
+ENV FALLBACK_SITE_URL=$DEFAULT_SITE_URL
 WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
@@ -38,4 +39,4 @@ WORKDIR /data
 VOLUME /data
 EXPOSE 4321
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["node", "/app/dist/server/entry.mjs"]
+CMD ["node", "--import", "/app/scripts/public-origin.mjs", "/app/dist/server/entry.mjs"]
