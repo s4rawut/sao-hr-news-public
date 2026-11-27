@@ -13,9 +13,6 @@
   "dependencies": {
     "@astrojs/node": "^11.1.5",
     "@astrojs/react": "^7.0.0",
-    "@oslojs/crypto": "^1.0.1",
-    "@oslojs/encoding": "^1.1.0",
-    "@oslojs/webauthn": "^1.0.0",
     "astro": "^7.3.2",
     "react": "19.2.4",
     "react-dom": "19.2.4"

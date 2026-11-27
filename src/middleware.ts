@@ -2,8 +2,8 @@ import { defineMiddleware } from "astro:middleware";
 import { MEDIA_PREFIX, serveUpload } from "./lib/cms/media";
 import { currentUser } from "./lib/admin/auth";
 
-/** /admin pages anyone may open (sign-in, sign-in links, invites). */
-const PUBLIC_ADMIN = [/^\/admin\/login\/?$/, /^\/admin\/auth\//, /^\/admin\/invite\/?$/, /^\/admin\/api\/passkey\/login/, /^\/admin\/api\/demo-login$/];
+/** /admin pages anyone may open (sign-in). */
+const PUBLIC_ADMIN = [/^\/admin\/login\/?$/, /^\/admin\/api\/demo-login$/];
 
 export const onRequest = defineMiddleware(async (context, next) => {
 	const { pathname } = context.url;
@@ -18,10 +18,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 	if (pathname === "/_emdash/admin" || pathname.startsWith("/_emdash/admin/")) {
 		return context.redirect("/admin", 302);
 	}
-	if (pathname === "/_emdash/api/auth/magic-link/verify") {
-		const token = context.url.searchParams.get("token") ?? "";
-		return context.redirect(`/admin/auth/link?token=${encodeURIComponent(token)}&next=${encodeURIComponent("/admin/account?addPasskey=1")}`, 302);
-	}
+	if (pathname.startsWith("/_emdash/api/auth/")) return context.redirect("/admin/login", 302);
 
 	if (pathname === "/admin" || pathname.startsWith("/admin/")) {
 		const user = currentUser(context.cookies);

@@ -2,7 +2,7 @@
 import AdminLayout from "../../admin/AdminLayout.astro";
 import { getSiteSettings } from "../../lib/cms";
 import { get, run, touch } from "../../lib/cms/db";
-import { audit, relyingParty } from "../../lib/admin/auth";
+import { audit } from "../../lib/admin/auth";
 import { setFlash } from "../../admin/flash";
 
 if ((Astro.locals.user?.role ?? 0) < 50) return Astro.redirect("/admin", 302);
@@ -19,7 +19,6 @@ if (Astro.request.method === "POST") {
 }
 const s = await getSiteSettings();
 const info = get<{ id: string }>(`SELECT id FROM ec_site_info WHERE deleted_at IS NULL LIMIT 1`);
-const rp = relyingParty(Astro.url);
 ---
 
 <AdminLayout title="ตั้งค่าเว็บไซต์" active="settings">
@@ -36,6 +35,5 @@ const rp = relyingParty(Astro.url);
 			<li><a href="/admin/menus">เมนูเว็บไซต์</a> — เมนูหลักและลิงก์ท้ายเว็บ</li>
 			<li><a href="/admin/users">ผู้ใช้และผู้ดูแล</a> — เพิ่มผู้ดูแล กำหนดสิทธิ์</li>
 		</ul>
-		<p class="muted small" style="margin: 14px 0 0">ที่อยู่เว็บสำหรับ passkey ตอนนี้: <strong>{rp.origin}</strong>{process.env.EMDASH_SITE_URL ? " (ตั้งไว้ใน .env)" : " (จากที่อยู่ที่เปิดเข้ามา)"}</p>
 	</div>
 </AdminLayout>

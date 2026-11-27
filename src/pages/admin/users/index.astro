@@ -1,39 +1,34 @@
 ---
 /**
- * Users and admins. An admin adds a person by making an invite link (they open it, create their
- * account and add a passkey). A sign-in link helps someone who changed device or lost a passkey.
+ * Users and admins: an admin adds a person with email + password and a role, resets a forgotten
+ * password, changes roles, disables or deletes accounts. Passwords are stored only as hashes.
  */
 import AdminLayout from "../../../admin/AdminLayout.astro";
 import AdminIcon from "../../../admin/AdminIcon.astro";
 import { all, get, run } from "../../../lib/cms/db";
-import { ROLE_LABELS, ROLES, audit, createInviteToken, createSignInToken, roleName } from "../../../lib/admin/auth";
+import { MIN_PASSWORD, ROLE_LABELS, ROLES, audit, createUser, roleName, setPassword } from "../../../lib/admin/auth";
 import { setFlash, thaiDateTime } from "../../../admin/flash";
 
 const me = Astro.locals.user!;
 if (me.role < ROLES.ADMIN) return Astro.redirect("/admin", 302);
 
-let created: { kind: "invite" | "signin"; email: string; link: string } | undefined;
 if (Astro.request.method === "POST") {
 	const form = await Astro.request.formData();
 	const action = String(form.get("_action"));
 	const id = String(form.get("id") ?? "");
 	const adminsLeft = () => get<{ n: number }>(`SELECT count(*) n FROM users WHERE role >= 50 AND disabled = 0 AND email <> 'dev@emdash.local'`)!.n;
 	try {
-		if (action === "invite") {
-			const email = String(form.get("email") ?? "").trim().toLowerCase();
-			const role = Number(form.get("role"));
-			if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("อีเมลไม่ถูกต้อง");
-			if (!ROLE_LABELS[role]) throw new Error("เลือกสิทธิ์");
-			const existing = get<{ id: string }>(`SELECT id FROM users WHERE lower(email) = ?`, email);
-			if (existing) {
-				run(`UPDATE users SET role = ?, disabled = 0 WHERE id = ?`, role, existing.id);
-				const token = createSignInToken(existing.id, email, 60 * 24);
-				created = { kind: "signin", email, link: `${Astro.url.origin}/admin/auth/link?token=${encodeURIComponent(token)}` };
-			} else {
-				const token = createInviteToken(email, role, me.id);
-				created = { kind: "invite", email, link: `${Astro.url.origin}/admin/invite?token=${encodeURIComponent(token)}` };
-			}
-			audit(me.id, "user.invite", "user", email, { role });
+		if (action === "add") {
+			const pw = String(form.get("password") ?? "");
+			if (pw !== String(form.get("confirm") ?? "")) throw new Error("รหัสผ่านสองช่องไม่ตรงกัน");
+			const newId = createUser(String(form.get("email") ?? ""), String(form.get("name") ?? ""), Number(form.get("role")), pw);
+			audit(me.id, "user.create", "user", newId, { role: Number(form.get("role")) });
+			setFlash(Astro.cookies, "ok", `เพิ่มผู้ใช้ ${String(form.get("email")).trim().toLowerCase()} แล้ว — แจ้งอีเมลและรหัสผ่านให้เจ้าตัวทางช่องทางส่วนตัว`);
+		} else if (action === "reset") {
+			const pw = String(form.get("password") ?? "");
+			setPassword(id, pw);
+			audit(me.id, "user.password.reset", "user", id);
+			setFlash(Astro.cookies, "ok", "ตั้งรหัสผ่านใหม่แล้ว — แจ้งเจ้าตัวทางช่องทางส่วนตัว (เครื่องที่เข้าไว้เดิมจะต้องเข้าสู่ระบบใหม่)");
 		} else if (action === "role") {
 			const role = Number(form.get("role"));
 			if (!ROLE_LABELS[role]) throw new Error("เลือกสิทธิ์");
@@ -49,15 +44,6 @@ if (Astro.request.method === "POST") {
 			run(`UPDATE users SET disabled = ? WHERE id = ?`, action === "disable" ? 1 : 0, id);
 			audit(me.id, `user.${action}`, "user", id);
 			setFlash(Astro.cookies, "ok", action === "disable" ? "ปิดการใช้งานแล้ว" : "เปิดการใช้งานแล้ว");
-		} else if (action === "signin") {
-			const target = get<{ email: string }>(`SELECT email FROM users WHERE id = ?`, id);
-			if (!target) throw new Error("ไม่พบผู้ใช้");
-			const token = createSignInToken(id, target.email, 60 * 24);
-			created = { kind: "signin", email: target.email, link: `${Astro.url.origin}/admin/auth/link?token=${encodeURIComponent(token)}` };
-			audit(me.id, "user.signin_link", "user", id);
-		} else if (action === "revoke") {
-			run(`DELETE FROM auth_tokens WHERE hash = ? AND type = 'invite'`, String(form.get("hash")));
-			setFlash(Astro.cookies, "ok", "ยกเลิกคำเชิญแล้ว");
 		} else if (action === "delete") {
 			if (id === me.id) throw new Error("ลบบัญชีของตัวเองไม่ได้");
 			const target = get<{ role: number }>(`SELECT role FROM users WHERE id = ?`, id);
@@ -69,54 +55,37 @@ if (Astro.request.method === "POST") {
 	} catch (e) {
 		setFlash(Astro.cookies, "error", (e as Error).message);
 	}
-	if (!created) return Astro.redirect("/admin/users", 303);
+	return Astro.redirect("/admin/users", 303);
 }
 
-const users = all<{ id: string; email: string; name: string | null; role: number; disabled: number; created_at: string; updated_at: string; passkeys: number }>(
-	`SELECT u.id, u.email, u.name, u.role, u.disabled, u.created_at, u.updated_at, (SELECT count(*) FROM credentials c WHERE c.user_id = u.id) passkeys
-	 FROM users u WHERE u.email <> 'dev@emdash.local' ORDER BY u.role DESC, u.created_at`,
-);
-const invites = all<{ hash: string; email: string; role: number; expires_at: string }>(
-	`SELECT hash, email, role, expires_at FROM auth_tokens WHERE type = 'invite' AND expires_at > ? ORDER BY created_at DESC`,
-	new Date().toISOString(),
+const users = all<{ id: string; email: string; name: string | null; role: number; disabled: number; updated_at: string; has_pw: number }>(
+	`SELECT id, email, name, role, disabled, updated_at, password_hash IS NOT NULL AS has_pw FROM users WHERE email <> 'dev@emdash.local' ORDER BY role DESC, created_at`,
 );
 const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Number(a[0]));
 ---
 
-<AdminLayout title="ผู้ใช้และผู้ดูแล" active="users" subtitle="เพิ่มผู้ดูแล กำหนดสิทธิ์ และส่งลิงก์เข้าสู่ระบบ">
-	{created && (
-		<div class="card card-pad" style="margin-bottom: 20px; border-color: var(--a-primary)">
-			<h2>{created.kind === "invite" ? `ลิงก์เชิญสำหรับ ${created.email}` : `ลิงก์เข้าสู่ระบบสำหรับ ${created.email}`}</h2>
-			<p class="muted small">
-				{created.kind === "invite"
-					? "ส่งลิงก์นี้ให้เจ้าตัวทางช่องทางส่วนตัว (ใช้ได้ 7 วัน ครั้งเดียว) เมื่อเปิดลิงก์ ระบบจะสร้างบัญชีแล้วให้เพิ่ม passkey บนเครื่องของเขา"
-					: "ส่งลิงก์นี้ให้เจ้าตัวทางช่องทางส่วนตัว (ใช้ได้ 24 ชั่วโมง ครั้งเดียว) เปิดแล้วจะเข้าสู่ระบบและให้เพิ่ม passkey บนเครื่องใหม่"}
-			</p>
-			<div style="display: flex; gap: 8px">
-				<input type="text" readonly value={created.link} data-link />
-				<button class="btn primary" type="button" data-copy><AdminIcon name="copy" size={16} /> คัดลอก</button>
-			</div>
-			<p class="muted small" style="margin-bottom: 0">ลิงก์นี้คือสิทธิ์เข้าหลังบ้าน ห้ามโพสต์ในกลุ่มหรือที่สาธารณะ</p>
-		</div>
-	)}
-
-	<div class="card card-pad" style="margin-bottom: 20px">
+<AdminLayout title="ผู้ใช้และผู้ดูแล" active="users" subtitle="เพิ่มผู้ดูแล กำหนดสิทธิ์ ตั้งรหัสผ่านใหม่">
+	<form method="post" class="card card-pad" style="margin-bottom: 20px">
 		<h2>เพิ่มผู้ดูแล / ผู้ใช้</h2>
-		<form method="post" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end">
-			<input type="hidden" name="_action" value="invite" />
-			<div class="field" style="margin: 0"><label for="em">อีเมล</label><input id="em" type="email" name="email" required placeholder="name@audit.go.th" /></div>
+		<input type="hidden" name="_action" value="add" />
+		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px">
+			<div class="field" style="margin: 0"><label for="em">อีเมล (ใช้เข้าสู่ระบบ)</label><input id="em" type="email" name="email" required autocomplete="off" /></div>
+			<div class="field" style="margin: 0"><label for="nm">ชื่อที่แสดง</label><input id="nm" type="text" name="name" /></div>
 			<div class="field" style="margin: 0">
 				<label for="rl">สิทธิ์</label>
 				<select id="rl" name="role">{roleOptions.map(([v, l]) => <option value={v} selected={v === "50"}>{l}</option>)}</select>
 			</div>
-			<button class="btn primary" type="submit"><AdminIcon name="plus" size={16} /> สร้างลิงก์เชิญ</button>
-		</form>
-	</div>
+			<div class="field" style="margin: 0"><label for="pw">รหัสผ่าน</label><input id="pw" type="password" name="password" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
+			<div class="field" style="margin: 0"><label for="pc">ยืนยันรหัสผ่าน</label><input id="pc" type="password" name="confirm" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
+		</div>
+		<p class="help" style="margin: 8px 0 12px">รหัสผ่านอย่างน้อย {MIN_PASSWORD} ตัวอักษร ผสมตัวอักษรและตัวเลข เจ้าตัวเปลี่ยนเองได้ภายหลังที่ "บัญชีของฉัน"</p>
+		<button class="btn primary" type="submit"><AdminIcon name="plus" size={16} /> เพิ่มผู้ใช้</button>
+	</form>
 
 	<div class="card">
 		<div class="table-wrap">
 			<table class="list">
-				<thead><tr><th>ผู้ใช้</th><th>สิทธิ์</th><th>Passkey</th><th>ใช้งานล่าสุด</th><th></th></tr></thead>
+				<thead><tr><th>ผู้ใช้</th><th>สิทธิ์</th><th>ใช้งานล่าสุด</th><th>ตั้งรหัสผ่านใหม่</th><th></th></tr></thead>
 				<tbody>
 					{users.map((u) => (
 						<tr style={u.disabled ? "opacity: 0.55" : undefined}>
@@ -124,10 +93,11 @@ const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Nu
 								<strong>{u.name || u.email}</strong>
 								{u.id === me.id && <span class="badge published" style="margin-left: 6px">คุณ</span>}
 								{u.disabled ? <span class="badge draft" style="margin-left: 6px">ปิดใช้งาน</span> : null}
+								{!u.has_pw && <span class="badge warn" style="margin-left: 6px">ยังไม่มีรหัสผ่าน</span>}
 								<div class="muted small">{u.email}</div>
 							</td>
 							<td>
-								<form method="post" style="display: flex; gap: 6px">
+								<form method="post">
 									<input type="hidden" name="_action" value="role" />
 									<input type="hidden" name="id" value={u.id} />
 									<select name="role" style="width: auto" onchange="this.form.requestSubmit()">
@@ -135,13 +105,15 @@ const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Nu
 									</select>
 								</form>
 							</td>
-							<td class="small">{u.passkeys}</td>
 							<td class="muted small">{thaiDateTime(u.updated_at)}</td>
-							<td style="white-space: nowrap; text-align: right">
-								<form method="post" style="display: inline">
-									<input type="hidden" name="_action" value="signin" /><input type="hidden" name="id" value={u.id} />
-									<button class="btn sm" type="submit" title="สร้างลิงก์เข้าสู่ระบบ (เปลี่ยนเครื่อง / passkey หาย)"><AdminIcon name="link" size={14} /> ลิงก์เข้าระบบ</button>
+							<td>
+								<form method="post" style="display: flex; gap: 6px">
+									<input type="hidden" name="_action" value="reset" /><input type="hidden" name="id" value={u.id} />
+									<input type="password" name="password" placeholder="รหัสผ่านใหม่" minlength={MIN_PASSWORD} required autocomplete="new-password" style="width: 150px" />
+									<button class="btn sm" type="submit">ตั้ง</button>
 								</form>
+							</td>
+							<td style="white-space: nowrap; text-align: right">
 								{u.id !== me.id && (
 									<form method="post" style="display: inline">
 										<input type="hidden" name="_action" value={u.disabled ? "enable" : "disable"} /><input type="hidden" name="id" value={u.id} />
@@ -161,33 +133,4 @@ const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Nu
 			</table>
 		</div>
 	</div>
-
-	{invites.length > 0 && (
-		<div class="card card-pad" style="margin-top: 20px">
-			<h2>คำเชิญที่ยังไม่ได้เปิด</h2>
-			<table class="list">
-				<tbody>
-					{invites.map((i) => (
-						<tr>
-							<td>{i.email}</td>
-							<td class="small">{roleName(i.role)}</td>
-							<td class="muted small">หมดอายุ {thaiDateTime(i.expires_at)}</td>
-							<td style="text-align: right">
-								<form method="post"><input type="hidden" name="_action" value="revoke" /><input type="hidden" name="hash" value={i.hash} /><button class="btn sm danger" type="submit">ยกเลิก</button></form>
-							</td>
-						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
-	)}
 </AdminLayout>
-
-<script>
-	document.querySelector("[data-copy]")?.addEventListener("click", async (e) => {
-		const input = document.querySelector<HTMLInputElement>("[data-link]")!;
-		input.select();
-		await navigator.clipboard?.writeText(input.value).catch(() => document.execCommand("copy"));
-		(e.currentTarget as HTMLButtonElement).textContent = "คัดลอกแล้ว";
-	});
-</script>

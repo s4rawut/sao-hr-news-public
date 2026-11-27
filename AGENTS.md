@@ -10,7 +10,7 @@ longer used** (removed in 2569-11-27-3). The database still has EmDash's table l
 ```bash
 npm run dev       # http://localhost:4321  (admin: /admin)
 npm run build     # production build → dist/
-node scripts/admin-login-link.mjs http://localhost:4321   # one-time admin sign-in link
+node scripts/admin-set-password.mjs <email>               # set an admin password (hash in users.password_hash)
 node scripts/apply-patches.mjs                            # database patches in patches/
 ```
 
@@ -19,7 +19,7 @@ node scripts/apply-patches.mjs                            # database patches in 
 | Path | What |
 | --- | --- |
 | `src/lib/cms/` | reading content: `getEmDashCollection`, `getEmDashEntry`, taxonomies, menus, settings, media serving, Portable Text → HTML. Names kept from EmDash so pages did not change. |
-| `src/lib/admin/` | admin logic: sign-in (passkeys, links, sessions), saving entries, media uploads, menus |
+| `src/lib/admin/` | admin logic: email + password sign-in (scrypt hashes, lockout, signed session cookie — all state in the DB), saving entries, media uploads, menus |
 | `src/pages/admin/` | admin pages (list / edit any collection, media, menus, categories, users, settings) |
 | `src/admin/` | admin layout, CSS, field widgets (`FieldInput.astro`, `fields-client.ts`) |
 | `src/middleware.ts` | serves uploads at `/_emdash/api/media/file/<key>`, guards `/admin` |

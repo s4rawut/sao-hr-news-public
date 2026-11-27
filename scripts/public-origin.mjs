@@ -1,7 +1,7 @@
 // Loaded before the server in the container (node --import). Makes the site use the domain people
 // actually opened, so changing the domain needs no setting:
 //  - a request for a real domain (Host or X-Forwarded-Host) with no X-Forwarded-Proto is taken as
-//    https, because the reverse proxy in front does HTTPS (admin sign-in and passkeys need https)
+//    https, because the reverse proxy in front does HTTPS (secure admin cookies need https)
 //  - a request that reaches the server as localhost / an IP (the proxy did not pass the domain on)
 //    uses FALLBACK_SITE_URL, if set
 // Astro then only trusts domains listed in astro.config.mjs security.allowedDomains.
