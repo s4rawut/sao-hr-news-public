@@ -1,12 +1,13 @@
 ---
 /**
- * Users and admins: an admin adds a person with email + password and a role, resets a forgotten
+ * Users and admins: an admin adds a person with username + password and a role, resets a forgotten
  * password, changes roles, disables or deletes accounts. Passwords are stored only as hashes.
  */
 import AdminLayout from "../../../admin/AdminLayout.astro";
 import AdminIcon from "../../../admin/AdminIcon.astro";
+import PasswordInput from "../../../admin/PasswordInput.astro";
 import { all, get, run } from "../../../lib/cms/db";
-import { MIN_PASSWORD, ROLE_LABELS, ROLES, audit, createUser, roleName, setPassword } from "../../../lib/admin/auth";
+import { MIN_PASSWORD, ROLE_LABELS, ROLES, USERNAME_RULE, audit, createUser, normUsername, roleName, setPassword } from "../../../lib/admin/auth";
 import { setFlash, thaiDateTime } from "../../../admin/flash";
 
 const me = Astro.locals.user!;
@@ -21,9 +22,9 @@ if (Astro.request.method === "POST") {
 		if (action === "add") {
 			const pw = String(form.get("password") ?? "");
 			if (pw !== String(form.get("confirm") ?? "")) throw new Error("รหัสผ่านสองช่องไม่ตรงกัน");
-			const newId = createUser(String(form.get("email") ?? ""), String(form.get("name") ?? ""), Number(form.get("role")), pw);
+			const newId = createUser(String(form.get("username") ?? ""), String(form.get("name") ?? ""), Number(form.get("role")), pw);
 			audit(me.id, "user.create", "user", newId, { role: Number(form.get("role")) });
-			setFlash(Astro.cookies, "ok", `เพิ่มผู้ใช้ ${String(form.get("email")).trim().toLowerCase()} แล้ว — แจ้งอีเมลและรหัสผ่านให้เจ้าตัวทางช่องทางส่วนตัว`);
+			setFlash(Astro.cookies, "ok", `เพิ่มผู้ใช้ ${normUsername(String(form.get("username")))} แล้ว — แจ้งชื่อผู้ใช้และรหัสผ่านให้เจ้าตัวทางช่องทางส่วนตัว`);
 		} else if (action === "reset") {
 			const pw = String(form.get("password") ?? "");
 			setPassword(id, pw);
@@ -58,8 +59,8 @@ if (Astro.request.method === "POST") {
 	return Astro.redirect("/admin/users", 303);
 }
 
-const users = all<{ id: string; email: string; name: string | null; role: number; disabled: number; updated_at: string; has_pw: number }>(
-	`SELECT id, email, name, role, disabled, updated_at, password_hash IS NOT NULL AS has_pw FROM users WHERE email <> 'dev@emdash.local' ORDER BY role DESC, created_at`,
+const users = all<{ id: string; username: string; name: string | null; role: number; disabled: number; updated_at: string; has_pw: number }>(
+	`SELECT id, username, name, role, disabled, updated_at, password_hash IS NOT NULL AS has_pw FROM users WHERE email <> 'dev@emdash.local' ORDER BY role DESC, created_at`,
 );
 const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Number(a[0]));
 ---
@@ -69,16 +70,16 @@ const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Nu
 		<h2>เพิ่มผู้ดูแล / ผู้ใช้</h2>
 		<input type="hidden" name="_action" value="add" />
 		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px">
-			<div class="field" style="margin: 0"><label for="em">อีเมล (ใช้เข้าสู่ระบบ)</label><input id="em" type="email" name="email" required autocomplete="off" /></div>
+			<div class="field" style="margin: 0"><label for="un">ชื่อผู้ใช้ (ใช้เข้าสู่ระบบ)</label><input id="un" type="text" name="username" required autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="เช่น somchai" /></div>
 			<div class="field" style="margin: 0"><label for="nm">ชื่อที่แสดง</label><input id="nm" type="text" name="name" /></div>
 			<div class="field" style="margin: 0">
 				<label for="rl">สิทธิ์</label>
 				<select id="rl" name="role">{roleOptions.map(([v, l]) => <option value={v} selected={v === "50"}>{l}</option>)}</select>
 			</div>
-			<div class="field" style="margin: 0"><label for="pw">รหัสผ่าน</label><input id="pw" type="password" name="password" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
-			<div class="field" style="margin: 0"><label for="pc">ยืนยันรหัสผ่าน</label><input id="pc" type="password" name="confirm" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
+			<div class="field" style="margin: 0"><label for="pw">รหัสผ่าน</label><PasswordInput id="pw" name="password" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
+			<div class="field" style="margin: 0"><label for="pc">ยืนยันรหัสผ่าน</label><PasswordInput id="pc" name="confirm" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
 		</div>
-		<p class="help" style="margin: 8px 0 12px">รหัสผ่านอย่างน้อย {MIN_PASSWORD} ตัวอักษร ผสมตัวอักษรและตัวเลข เจ้าตัวเปลี่ยนเองได้ภายหลังที่ "บัญชีของฉัน"</p>
+		<p class="help" style="margin: 8px 0 12px">ชื่อผู้ใช้ {USERNAME_RULE} · รหัสผ่านอย่างน้อย {MIN_PASSWORD} ตัวอักษร ผสมตัวอักษรและตัวเลข เจ้าตัวเปลี่ยนเองได้ภายหลังที่ "บัญชีของฉัน"</p>
 		<button class="btn primary" type="submit"><AdminIcon name="plus" size={16} /> เพิ่มผู้ใช้</button>
 	</form>
 
@@ -90,11 +91,11 @@ const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Nu
 					{users.map((u) => (
 						<tr style={u.disabled ? "opacity: 0.55" : undefined}>
 							<td>
-								<strong>{u.name || u.email}</strong>
+								<strong>{u.name || u.username}</strong>
 								{u.id === me.id && <span class="badge published" style="margin-left: 6px">คุณ</span>}
 								{u.disabled ? <span class="badge draft" style="margin-left: 6px">ปิดใช้งาน</span> : null}
 								{!u.has_pw && <span class="badge warn" style="margin-left: 6px">ยังไม่มีรหัสผ่าน</span>}
-								<div class="muted small">{u.email}</div>
+								<div class="muted small">ชื่อผู้ใช้: {u.username}</div>
 							</td>
 							<td>
 								<form method="post">
@@ -109,7 +110,7 @@ const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Nu
 							<td>
 								<form method="post" style="display: flex; gap: 6px">
 									<input type="hidden" name="_action" value="reset" /><input type="hidden" name="id" value={u.id} />
-									<input type="password" name="password" placeholder="รหัสผ่านใหม่" minlength={MIN_PASSWORD} required autocomplete="new-password" style="width: 150px" />
+									<PasswordInput name="password" placeholder="รหัสผ่านใหม่" minlength={MIN_PASSWORD} required autocomplete="new-password" compact />
 									<button class="btn sm" type="submit">ตั้ง</button>
 								</form>
 							</td>
@@ -123,7 +124,7 @@ const roleOptions = Object.entries(ROLE_LABELS).sort((a, b) => Number(b[0]) - Nu
 								{u.id !== me.id && (
 									<form method="post" style="display: inline">
 										<input type="hidden" name="_action" value="delete" /><input type="hidden" name="id" value={u.id} />
-										<button class="btn sm danger" type="submit" data-confirm={`ลบผู้ใช้ ${u.email}?`}><AdminIcon name="trash" size={14} /></button>
+										<button class="btn sm danger" type="submit" data-confirm={`ลบผู้ใช้ ${u.username}?`}><AdminIcon name="trash" size={14} /></button>
 									</form>
 								)}
 							</td>

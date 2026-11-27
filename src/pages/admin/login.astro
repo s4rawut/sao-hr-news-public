@@ -1,22 +1,23 @@
 ---
 import BareLayout from "../../admin/BareLayout.astro";
+import PasswordInput from "../../admin/PasswordInput.astro";
 import { safeNext } from "../../admin/flash";
 import { isSecure } from "../../admin/api";
 import { getSiteSettings } from "../../lib/cms";
-import { audit, createSession, signIn } from "../../lib/admin/auth";
+import { audit, createSession, normUsername, signIn } from "../../lib/admin/auth";
 import { isDemo } from "../../lib/admin/demo";
 
 const next = safeNext(Astro.url.searchParams.get("next"));
 if (Astro.locals.user) return Astro.redirect(next, 302);
 let error = "";
-let email = "";
+let username = "";
 if (Astro.request.method === "POST") {
 	const form = await Astro.request.formData();
-	email = String(form.get("email") ?? "");
-	const result = signIn(email, String(form.get("password") ?? ""));
+	username = String(form.get("username") ?? "");
+	const result = signIn(username, String(form.get("password") ?? ""));
 	if ("error" in result) {
 		error = result.error;
-		audit(null, "auth.login.failed", "user", email.trim().toLowerCase(), { ip: Astro.clientAddress });
+		audit(null, "auth.login.failed", "user", normUsername(username), { ip: Astro.clientAddress });
 	} else {
 		createSession(Astro.cookies, result.user.id, isSecure(Astro.url));
 		audit(result.user.id, "auth.login", "user", result.user.id, { ip: Astro.clientAddress });
@@ -27,16 +28,21 @@ const settings = await getSiteSettings();
 ---
 
 <BareLayout title="เข้าสู่ระบบหลังบ้าน">
-	<h1>เข้าสู่ระบบหลังบ้าน</h1>
-	<p class="muted">{settings.title as string}</p>
-	<form method="post" style="text-align: left; margin-top: 18px">
+	<div class="login-head">
+		<span class="adm-brand-mark">HR</span>
+		<div>
+			<h1>เข้าสู่ระบบหลังบ้าน</h1>
+			<p>{settings.title as string}</p>
+		</div>
+	</div>
+	<form method="post">
 		<div class="field">
-			<label for="em">อีเมล</label>
-			<input id="em" type="email" name="email" value={email} required autocomplete="username" autofocus />
+			<label for="un">ชื่อผู้ใช้</label>
+			<input id="un" type="text" name="username" value={username} required autocomplete="username" autocapitalize="none" spellcheck="false" autofocus placeholder="username" />
 		</div>
 		<div class="field">
 			<label for="pw">รหัสผ่าน</label>
-			<input id="pw" type="password" name="password" required autocomplete="current-password" />
+			<PasswordInput name="password" id="pw" required placeholder="••••••••" />
 		</div>
 		<button class="btn primary" type="submit">เข้าสู่ระบบ</button>
 		{error && <p class="login-err" role="alert">{error}</p>}
@@ -44,8 +50,8 @@ const settings = await getSiteSettings();
 	{isDemo() && (
 		<form method="post" action="/admin/api/demo-login" style="margin-top: 10px">
 			<button class="btn" type="submit">เข้าสู่ระบบแบบทดลอง (เว็บตัวอย่าง)</button>
-			<p class="notice info small" style="margin-top: 14px; text-align: left">เว็บตัวอย่างสำหรับทดลองหลังบ้าน แก้ไขได้ทุกอย่าง ข้อมูลจะกลับเป็นค่าตั้งต้นเองเมื่อไม่มีคนใช้สักพัก</p>
+			<p class="notice info small" style="margin: 14px 0 0">เว็บตัวอย่างสำหรับทดลองหลังบ้าน แก้ไขได้ทุกอย่าง ข้อมูลจะกลับเป็นค่าตั้งต้นเองเมื่อไม่มีคนใช้สักพัก</p>
 		</form>
 	)}
-	<p class="muted small" style="margin-top: 20px">ลืมรหัสผ่าน: ให้ผู้ดูแลระบบตั้งรหัสใหม่ให้ที่เมนู "ผู้ใช้และผู้ดูแล"</p>
+	<p class="login-foot">ลืมรหัสผ่าน: ให้ผู้ดูแลระบบตั้งรหัสใหม่ให้ที่เมนู "ผู้ใช้และผู้ดูแล"</p>
 </BareLayout>

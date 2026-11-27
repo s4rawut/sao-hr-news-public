@@ -1,5 +1,5 @@
 /**
- * Admin sign-in with email + password. Everything is in the database: password hashes (scrypt)
+ * Admin sign-in with username + password. Everything is in the database: password hashes (scrypt)
  * in users.password_hash, the cookie-signing secret in options, failed-attempt counters in
  * _hr_login_attempts. No password is stored in code or config.
  */
@@ -19,6 +19,7 @@ export const roleName = (role: number) =>
 
 export interface AdminUser {
 	id: string;
+	username: string;
 	email: string;
 	name: string | null;
 	role: number;
@@ -64,20 +65,29 @@ export function setPassword(userId: string, password: string) {
 	run(`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hashPassword(password), nowIso(), userId);
 }
 
+/* ---------- usernames ---------- */
+
+export const USERNAME_RULE = "3–32 ตัว: a–z ตัวเลข จุด ขีด หรือขีดล่าง";
+export function checkUsername(username: string): string | null {
+	return /^[a-z0-9][a-z0-9._-]{2,31}$/.test(username) ? null : `username ใช้ได้ ${USERNAME_RULE}`;
+}
+export const normUsername = (u: string) => u.trim().toLowerCase();
+
 /* ---------- sign-in with lockout ---------- */
 
-const attemptKey = (email: string) => `email:${email.trim().toLowerCase()}`;
+const attemptKey = (username: string) => `user:${normUsername(username)}`;
+const USER_COLS = "id, username, email, name, role, disabled";
 
-export function signIn(email: string, password: string): { user: AdminUser } | { error: string } {
-	const key = attemptKey(email);
+export function signIn(username: string, password: string): { user: AdminUser } | { error: string } {
+	const key = attemptKey(username);
 	const a = get<{ failures: number; locked_until: string | null }>(`SELECT failures, locked_until FROM _hr_login_attempts WHERE key = ?`, key);
 	if (a?.locked_until && Date.parse(a.locked_until) > Date.now()) {
 		const mins = Math.ceil((Date.parse(a.locked_until) - Date.now()) / 60_000);
 		return { error: `ใส่รหัสผิดหลายครั้ง บัญชีนี้ถูกล็อกชั่วคราว ลองใหม่ใน ${mins} นาที` };
 	}
 	const row = get<AdminUser & { password_hash: string | null }>(
-		`SELECT id, email, name, role, disabled, password_hash FROM users WHERE lower(email) = lower(?)`,
-		email.trim(),
+		`SELECT ${USER_COLS}, password_hash FROM users WHERE username = ?`,
+		normUsername(username),
 	);
 	// verify even when the user does not exist, so timing does not reveal which emails exist
 	const ok = verifyPassword(password, row?.password_hash ?? "scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$" + "A".repeat(86) + "==");
@@ -92,7 +102,7 @@ export function signIn(email: string, password: string): { user: AdminUser } | {
 			locked,
 			nowIso(),
 		);
-		return { error: locked ? `ใส่รหัสผิด ${MAX_FAILURES} ครั้ง ล็อกชั่วคราว ${LOCK_MINUTES} นาที` : "อีเมลหรือรหัสผ่านไม่ถูกต้อง" };
+		return { error: locked ? `ใส่รหัสผิด ${MAX_FAILURES} ครั้ง ล็อกชั่วคราว ${LOCK_MINUTES} นาที` : "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" };
 	}
 	if (row.disabled) return { error: "บัญชีนี้ถูกปิดใช้งาน ติดต่อผู้ดูแลระบบ" };
 	run(`DELETE FROM _hr_login_attempts WHERE key = ?`, key);
@@ -133,25 +143,30 @@ export function currentUser(cookies: AstroCookies): AdminUser | null {
 	const expected = sign(`${userId}.${exp}.${stamp}`);
 	if (mac.length !== expected.length || !timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return null;
 	if (Number(exp) < Date.now()) return null;
-	const user = get<AdminUser & { password_hash: string | null }>(`SELECT id, email, name, role, disabled, password_hash FROM users WHERE id = ?`, userId);
+	const user = get<AdminUser & { password_hash: string | null }>(`SELECT ${USER_COLS}, password_hash FROM users WHERE id = ?`, userId);
 	if (!user || user.disabled || user.email === DEV_ACCOUNT || user.role < ROLES.CONTRIBUTOR) return null;
 	if (passwordStamp(user.password_hash) !== stamp) return null;
 	const { password_hash: _, ...rest } = user;
 	return rest;
 }
 
-export function createUser(email: string, name: string, role: number, password: string): string {
-	const e = email.trim().toLowerCase();
-	if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error("อีเมลไม่ถูกต้อง");
+export function createUser(username: string, name: string, role: number, password: string): string {
+	const u = normUsername(username);
+	const bad = checkUsername(u);
+	if (bad) throw new Error(bad);
 	if (!ROLE_LABELS[role]) throw new Error("เลือกสิทธิ์");
-	if (get(`SELECT 1 FROM users WHERE lower(email) = ?`, e)) throw new Error("มีผู้ใช้อีเมลนี้แล้ว");
+	if (get(`SELECT 1 FROM users WHERE username = ?`, u)) throw new Error("มีชื่อผู้ใช้นี้แล้ว");
 	const problem = checkPassword(password);
 	if (problem) throw new Error(problem);
 	const id = ulid();
+	// users.email is required by the table; the admin signs in with the username
+	let email = `${u}@users.local`;
+	for (let i = 2; get(`SELECT 1 FROM users WHERE lower(email) = ?`, email); i++) email = `${u}-${i}@users.local`;
 	run(
-		`INSERT INTO users (id, email, name, role, email_verified, created_at, updated_at, disabled, password_hash) VALUES (?, ?, ?, ?, 1, ?, ?, 0, ?)`,
+		`INSERT INTO users (id, email, username, name, role, email_verified, created_at, updated_at, disabled, password_hash) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 0, ?)`,
 		id,
-		e,
+		email,
+		u,
 		name.trim() || null,
 		role,
 		nowIso(),
@@ -159,6 +174,14 @@ export function createUser(email: string, name: string, role: number, password: 
 		hashPassword(password),
 	);
 	return id;
+}
+
+export function setUsername(userId: string, username: string) {
+	const u = normUsername(username);
+	const bad = checkUsername(u);
+	if (bad) throw new Error(bad);
+	if (get(`SELECT 1 FROM users WHERE username = ? AND id <> ?`, u, userId)) throw new Error("มีชื่อผู้ใช้นี้แล้ว");
+	run(`UPDATE users SET username = ?, updated_at = ? WHERE id = ?`, u, nowIso(), userId);
 }
 
 export function audit(actorId: string | null, action: string, resourceType?: string, resourceId?: string, details?: unknown) {

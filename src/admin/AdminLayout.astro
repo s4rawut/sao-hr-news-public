@@ -34,7 +34,7 @@ const top = [link("/admin", "dashboard", "แดชบอร์ด", "home")];
 const manage = [
 	link("/admin/media", "media", "คลังไฟล์และรูปภาพ", "image"),
 	...(canManage
-		? [link("/admin/menus", "menus", "เมนูเว็บไซต์", "menu"), link("/admin/taxonomies", "taxonomies", "หมวดหมู่", "tag")]
+		? [link("/admin/home", "home", "จัดหน้าแรก", "home"), link("/admin/menus", "menus", "เมนูเว็บไซต์", "menu"), link("/admin/taxonomies", "taxonomies", "หมวดหมู่", "tag")]
 		: []),
 	...(isAdmin ? [link("/admin/users", "users", "ผู้ใช้และผู้ดูแล", "users"), link("/admin/settings", "settings", "ตั้งค่าเว็บไซต์", "settings")] : []),
 ];

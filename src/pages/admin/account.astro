@@ -1,7 +1,8 @@
 ---
 import AdminLayout from "../../admin/AdminLayout.astro";
+import PasswordInput from "../../admin/PasswordInput.astro";
 import { get, run } from "../../lib/cms/db";
-import { MIN_PASSWORD, audit, createSession, roleName, setPassword, verifyPassword } from "../../lib/admin/auth";
+import { MIN_PASSWORD, USERNAME_RULE, audit, createSession, roleName, setPassword, setUsername, verifyPassword } from "../../lib/admin/auth";
 import { setFlash } from "../../admin/flash";
 import { isSecure } from "../../admin/api";
 
@@ -11,8 +12,9 @@ if (Astro.request.method === "POST") {
 	const action = String(form.get("_action"));
 	try {
 		if (action === "name") {
+			setUsername(user.id, String(form.get("username") ?? ""));
 			run(`UPDATE users SET name = ? WHERE id = ?`, String(form.get("name") ?? "").trim() || null, user.id);
-			setFlash(Astro.cookies, "ok", "บันทึกชื่อแล้ว");
+			setFlash(Astro.cookies, "ok", "บันทึกแล้ว");
 		} else if (action === "password") {
 			const row = get<{ password_hash: string | null }>(`SELECT password_hash FROM users WHERE id = ?`, user.id)!;
 			if (row.password_hash && !verifyPassword(String(form.get("current") ?? ""), row.password_hash)) throw new Error("รหัสผ่านปัจจุบันไม่ถูกต้อง");
@@ -28,31 +30,36 @@ if (Astro.request.method === "POST") {
 	}
 	return Astro.redirect("/admin/account", 303);
 }
-const me = get<{ name: string | null; email: string; password_hash: string | null }>(`SELECT name, email, password_hash FROM users WHERE id = ?`, user.id)!;
+const me = get<{ name: string | null; username: string; password_hash: string | null }>(`SELECT name, username, password_hash FROM users WHERE id = ?`, user.id)!;
 ---
 
 <AdminLayout title="บัญชีของฉัน" active="account">
 	<div class="card card-pad" style="margin-bottom: 20px">
 		<h2>ข้อมูลบัญชี</h2>
-		<form method="post" style="display: flex; gap: 10px; align-items: end; flex-wrap: wrap">
+		<form method="post" style="display: flex; gap: 10px; align-items: start; flex-wrap: wrap">
 			<input type="hidden" name="_action" value="name" />
-			<div class="field" style="flex: 1; min-width: 240px; margin: 0">
+			<div class="field" style="flex: 1; min-width: 200px; margin: 0">
+				<label for="un">ชื่อผู้ใช้ (ใช้เข้าสู่ระบบ)</label>
+				<input id="un" type="text" name="username" value={me.username} required autocapitalize="none" spellcheck="false" />
+				<p class="help">{USERNAME_RULE}</p>
+			</div>
+			<div class="field" style="flex: 1; min-width: 200px; margin: 0">
 				<label for="nm">ชื่อที่แสดง</label>
 				<input id="nm" type="text" name="name" value={me.name ?? ""} />
 			</div>
-			<button class="btn" type="submit">บันทึก</button>
+			<button class="btn" type="submit" style="margin-top: 28px">บันทึก</button>
 		</form>
-		<p class="muted small" style="margin: 12px 0 0">อีเมล (ใช้เข้าสู่ระบบ): {me.email} · สิทธิ์: {roleName(user.role)}</p>
+		<p class="muted small" style="margin: 12px 0 0">สิทธิ์: {roleName(user.role)}</p>
 	</div>
 	<form method="post" class="card card-pad" style="max-width: 520px">
 		<h2>เปลี่ยนรหัสผ่าน</h2>
 		<input type="hidden" name="_action" value="password" />
-		<input type="text" name="username" value={me.email} autocomplete="username" hidden />
+		<input type="text" name="username" value={me.username} autocomplete="username" hidden />
 		{me.password_hash && (
-			<div class="field"><label for="cur">รหัสผ่านปัจจุบัน</label><input id="cur" type="password" name="current" required autocomplete="current-password" /></div>
+			<div class="field"><label for="cur">รหัสผ่านปัจจุบัน</label><PasswordInput id="cur" name="current" required /></div>
 		)}
-		<div class="field"><label for="np">รหัสผ่านใหม่</label><input id="np" type="password" name="password" required minlength={MIN_PASSWORD} autocomplete="new-password" /><p class="help">อย่างน้อย {MIN_PASSWORD} ตัวอักษร ผสมตัวอักษรและตัวเลข</p></div>
-		<div class="field"><label for="cp">ยืนยันรหัสผ่านใหม่</label><input id="cp" type="password" name="confirm" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
+		<div class="field"><label for="np">รหัสผ่านใหม่</label><PasswordInput id="np" name="password" required minlength={MIN_PASSWORD} autocomplete="new-password" /><p class="help">อย่างน้อย {MIN_PASSWORD} ตัวอักษร ผสมตัวอักษรและตัวเลข</p></div>
+		<div class="field"><label for="cp">ยืนยันรหัสผ่านใหม่</label><PasswordInput id="cp" name="confirm" required minlength={MIN_PASSWORD} autocomplete="new-password" /></div>
 		<button class="btn primary" type="submit">เปลี่ยนรหัสผ่าน</button>
 	</form>
 </AdminLayout>

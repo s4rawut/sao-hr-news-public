@@ -12,12 +12,12 @@ const DEMO_EMAIL = "demo@hr-sao.local";
 export function demoUserId(): string {
 	const u = get<{ id: string }>(`SELECT id FROM users WHERE email = ?`, DEMO_EMAIL);
 	if (u) {
-		run(`UPDATE users SET role = 50, disabled = 0 WHERE id = ?`, u.id);
+		run(`UPDATE users SET role = 50, disabled = 0, username = coalesce(username, 'demo') WHERE id = ?`, u.id);
 		return u.id;
 	}
 	const id = ulid();
 	run(
-		`INSERT INTO users (id, email, name, role, email_verified, created_at, updated_at, disabled) VALUES (?, ?, 'ผู้ทดลองใช้', 50, 1, ?, ?, 0)`,
+		`INSERT INTO users (id, email, username, name, role, email_verified, created_at, updated_at, disabled) VALUES (?, ?, 'demo', 'ผู้ทดลองใช้', 50, 1, ?, ?, 0)`,
 		id,
 		DEMO_EMAIL,
 		nowIso(),

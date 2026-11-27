@@ -1,0 +1,141 @@
+---
+/** Arrange the homepage: order, show / hide and width of each section (saved in the database). */
+import AdminLayout from "../../admin/AdminLayout.astro";
+import AdminIcon from "../../admin/AdminIcon.astro";
+import { HOME_SECTIONS, getHomeLayout, saveHomeLayout, type HomeSection } from "../../lib/cms/home-layout";
+import { get } from "../../lib/cms/db";
+import { audit } from "../../lib/admin/auth";
+import { setFlash } from "../../admin/flash";
+
+if ((Astro.locals.user?.role ?? 0) < 40) return Astro.redirect("/admin", 302);
+if (Astro.request.method === "POST") {
+	const form = await Astro.request.formData();
+	try {
+		saveHomeLayout(JSON.parse(String(form.get("layout") ?? "[]")) as HomeSection[]);
+		audit(Astro.locals.user!.id, "home.layout", "options", "hr:home_layout");
+		setFlash(Astro.cookies, "ok", "บันทึกการจัดหน้าแรกแล้ว");
+	} catch (e) {
+		setFlash(Astro.cookies, "error", (e as Error).message);
+	}
+	return Astro.redirect("/admin/home", 303);
+}
+const layout = getHomeLayout();
+const info = get<{ id: string }>(`SELECT id FROM ec_site_info WHERE deleted_at IS NULL LIMIT 1`);
+const EDIT: Record<string, string> = {
+	quick_links: "/admin/c/quick_links",
+	recruit: "/admin/c/recruitments",
+	news: "/admin/c/posts",
+	calendar: "/admin/c/events",
+	documents: "/admin/c/posts",
+};
+---
+
+<AdminLayout title="จัดหน้าแรก" active="home" subtitle="เลื่อนลำดับ ซ่อน/แสดง และเลือกความกว้างของแต่ละส่วน — ส่วนกว้างซ้าย + แคบขวาที่อยู่ติดกันจะวางคู่กันในแถวเดียว">
+	<a slot="actions" class="btn" href="/" target="_blank" rel="noopener"><AdminIcon name="external" size={15} /> ดูหน้าแรก</a>
+	<form method="post" data-guard>
+		<input type="hidden" name="layout" value={JSON.stringify(layout)} data-layout />
+		<div class="card card-pad">
+			<p class="muted small" style="margin-top: 0">แบนเนอร์ใหญ่ด้านบนอยู่บนสุดเสมอ (เปลี่ยนรูปได้ที่ <a href={info ? `/admin/c/site_info/${info.id}` : "/admin/c/site_info"}>ข้อมูลเว็บไซต์ / หน้าแรก</a> ซึ่งแก้หัวข้อของแต่ละส่วนได้ด้วย)</p>
+			<div class="rep-list" data-list></div>
+			<div style="display: flex; justify-content: flex-end; margin-top: 16px">
+				<button class="btn primary" type="submit"><AdminIcon name="check" size={15} /> บันทึก</button>
+			</div>
+		</div>
+		<div class="card card-pad" style="margin-top: 16px">
+			<h2>ตัวอย่างการวาง</h2>
+			<div data-preview class="home-preview"></div>
+		</div>
+	</form>
+	<script type="application/json" data-sections set:html={JSON.stringify(HOME_SECTIONS.map((s) => ({ ...s, edit: EDIT[s.key] })))} />
+</AdminLayout>
+
+<style>
+	.home-preview {
+		display: grid;
+		grid-template-columns: 1.65fr 1fr;
+		gap: 8px;
+		max-width: 520px;
+	}
+	.home-preview :global(div) {
+		padding: 10px 12px;
+		border-radius: 8px;
+		background: var(--a-primary-soft);
+		color: var(--a-primary-dark);
+		font-size: 0.8rem;
+		font-weight: 600;
+	}
+	.home-preview :global(.full) {
+		grid-column: 1 / -1;
+	}
+	.home-preview :global(.left) {
+		grid-column: 1;
+	}
+	.home-preview :global(.right) {
+		grid-column: 2;
+	}
+	.home-preview :global(.banner) {
+		grid-column: 1 / -1;
+		background: #eaecf0;
+		color: var(--a-muted);
+	}
+</style>
+
+<script>
+	type Sec = { key: string; visible: boolean; width: "full" | "left" | "right" };
+	const input = document.querySelector<HTMLInputElement>("[data-layout]")!;
+	const list = document.querySelector<HTMLElement>("[data-list]")!;
+	const preview = document.querySelector<HTMLElement>("[data-preview]")!;
+	const meta = JSON.parse(document.querySelector("[data-sections]")!.textContent || "[]") as { key: string; label: string; help: string; edit: string }[];
+	let layout = JSON.parse(input.value) as Sec[];
+	const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+	const save = () => {
+		input.value = JSON.stringify(layout);
+		input.dispatchEvent(new Event("change", { bubbles: true }));
+	};
+	function render() {
+		list.innerHTML = "";
+		layout.forEach((s, i) => {
+			const m = meta.find((x) => x.key === s.key)!;
+			const row = document.createElement("div");
+			row.className = "rep-item";
+			row.style.opacity = s.visible ? "1" : "0.55";
+			row.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+				<div style="display:flex;flex-direction:column;gap:2px">
+					<button type="button" class="btn sm ghost" data-up ${i === 0 ? "disabled" : ""} title="เลื่อนขึ้น">↑</button>
+					<button type="button" class="btn sm ghost" data-down ${i === layout.length - 1 ? "disabled" : ""} title="เลื่อนลง">↓</button>
+				</div>
+				<div style="flex:1;min-width:200px"><strong>${esc(m.label)}</strong><div class="muted small">${esc(m.help)} · <a href="${m.edit}">แก้เนื้อหา</a></div></div>
+				<label class="check"><input type="checkbox" data-vis ${s.visible ? "checked" : ""}> แสดงบนหน้าแรก</label>
+				<select data-width style="width:auto">
+					<option value="full">เต็มความกว้าง</option>
+					<option value="left">คอลัมน์ซ้าย (กว้าง)</option>
+					<option value="right">คอลัมน์ขวา (แคบ)</option>
+				</select>
+			</div>`;
+			row.querySelector<HTMLSelectElement>("[data-width]")!.value = s.width;
+			row.querySelector("[data-up]")!.addEventListener("click", () => {
+				[layout[i - 1], layout[i]] = [layout[i], layout[i - 1]];
+				save();
+				render();
+			});
+			row.querySelector("[data-down]")!.addEventListener("click", () => {
+				[layout[i + 1], layout[i]] = [layout[i], layout[i + 1]];
+				save();
+				render();
+			});
+			row.querySelector<HTMLInputElement>("[data-vis]")!.addEventListener("change", (e) => {
+				s.visible = (e.target as HTMLInputElement).checked;
+				save();
+				render();
+			});
+			row.querySelector<HTMLSelectElement>("[data-width]")!.addEventListener("change", (e) => {
+				s.width = (e.target as HTMLSelectElement).value as Sec["width"];
+				save();
+				render();
+			});
+			list.append(row);
+		});
+		preview.innerHTML = `<div class="banner">แบนเนอร์</div>` + layout.filter((s) => s.visible).map((s) => `<div class="${s.width}">${esc(meta.find((m) => m.key === s.key)!.label.split(" (")[0])}</div>`).join("");
+	}
+	render();
+</script>

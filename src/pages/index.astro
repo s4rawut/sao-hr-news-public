@@ -32,6 +32,16 @@ import {
 
 const now = new Date();
 
+// Homepage arrangement (order, shown/hidden, width) — stored in the database, edited at
+// หลังบ้าน → จัดหน้าแรก. Sections not listed (e.g. added later) keep their default place.
+import { getHomeLayout } from "../lib/cms/home-layout";
+const homeLayout = getHomeLayout();
+const sec = (key: string) => {
+	const i = homeLayout.findIndex((s) => s.key === key);
+	const s = homeLayout[i];
+	return { show: !!s?.visible, attrs: { style: `order: ${i}`, "data-width": s?.width ?? "full" } };
+};
+
 const [info, settings, termsResult, audienceResult] = await Promise.all([
 	getSiteInfo(),
 	getSiteSettings(),
@@ -270,36 +280,35 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 	</section>
 
 	<div class="container">
-		{
-			quickLinks.length > 0 && (
-				<nav
-					class="quick-links card"
-					aria-label="ระบบงานที่ใช้บ่อย"
-					style={`--ql-cols: ${Math.min(quickLinks.length, 6)}`}
-				>
-					{quickLinks.map((link) => (
-						<a
-							href={siteLink(link.data.url)}
-							target={link.data.new_tab ? "_blank" : undefined}
-							rel={link.data.new_tab ? "noopener noreferrer" : undefined}
-						>
-							<span class="ql-icon">
-								{link.data.icon_image ? (
-									<Image image={link.data.icon_image} alt="" width={28} height={28} />
-								) : (
-									<Icon name={quickLinkIcons[link.data.icon ?? ""] ?? "link"} />
-								)}							</span>
-							<span class="ql-label" {...link.edit.title}>{link.data.title}</span>
-						</a>
-					))}
-				</nav>
-			)
-		}
-
-		{/* ข่าวรับสมัครสอบ across the top, then ข่าวประชาสัมพันธ์ | ปฏิทินกิจกรรม, then the documents across */}
+		{/* sections in the order set at หลังบ้าน → จัดหน้าแรก (CSS order + width) */}
 		<div class="home-grid">
-			{recruitData.levels.length > 0 && (
-				<section class="hg-cell hg-recruit" id="recruit">
+			{quickLinks.length > 0 && sec("quick_links").show && (
+				<div class="hg-cell hg-quick" {...sec("quick_links").attrs}>
+					<nav
+						class="quick-links card"
+						aria-label="ระบบงานที่ใช้บ่อย"
+						style={`--ql-cols: ${Math.min(quickLinks.length, 6)}`}
+					>
+						{quickLinks.map((link) => (
+							<a
+								href={siteLink(link.data.url)}
+								target={link.data.new_tab ? "_blank" : undefined}
+								rel={link.data.new_tab ? "noopener noreferrer" : undefined}
+							>
+								<span class="ql-icon">
+									{link.data.icon_image ? (
+										<Image image={link.data.icon_image} alt="" width={28} height={28} />
+									) : (
+										<Icon name={quickLinkIcons[link.data.icon ?? ""] ?? "link"} />
+									)}							</span>
+								<span class="ql-label" {...link.edit.title}>{link.data.title}</span>
+							</a>
+						))}
+					</nav>
+				</div>
+			)}
+			{recruitData.levels.length > 0 && sec("recruit").show && (
+				<section class="hg-cell hg-recruit" id="recruit" {...sec("recruit").attrs}>
 					<h2 class="section-title">
 						{info.heading_recruitments}
 						<a href="/recruitments" class="see-all">ดูทั้งหมด</a>
@@ -308,7 +317,8 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 				</section>
 			)}
 
-			<section class="hg-cell hg-news" id="news">
+			{sec("news").show && (
+			<section class="hg-cell hg-news" id="news" {...sec("news").attrs}>
 				<h2 class="section-title">
 					{info.heading_news}
 					<a href="/posts" class="see-all">ดูทั้งหมด</a>
@@ -401,7 +411,10 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 			</section>
 
 
-			<section class="hg-cell hg-cal" id="calendar">
+			)}
+
+			{sec("calendar").show && (
+			<section class="hg-cell hg-cal" id="calendar" {...sec("calendar").attrs}>
 				<h2 class="section-title">
 					{info.heading_calendar}
 					<small>วันนี้ {formatThaiCompact(now)}</small>
@@ -512,7 +525,10 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 				</div>
 			</section>
 
-			<section class="hg-cell hg-docs docs" id="docs" data-limit={info.documents_limit} data-see-all={docsSeeAll}>
+			)}
+
+			{sec("documents").show && (
+			<section class="hg-cell hg-docs docs" id="docs" data-limit={info.documents_limit} data-see-all={docsSeeAll} {...sec("documents").attrs}>
 				<h2 class="section-title">
 					{info.heading_documents}
 					{postAudiences.length > 0 && (
@@ -567,7 +583,7 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 						</nav>
 					</div>
 			</section>
-
+			)}
 		</div>
 	</div>
 
@@ -1832,7 +1848,7 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
 		gap: 40px 28px;
 		align-items: start;
-		margin-top: 40px;
+		margin-top: 32px;
 	}
 
 	.hg-cell {
@@ -1840,10 +1856,11 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		margin-top: 0;
 	}
 
-	.hg-recruit { grid-column: 1 / -1; grid-row: 1; }
-	.hg-news { grid-column: 1; grid-row: 2; }
-	.hg-cal { grid-column: 2; grid-row: 2; }
-	.hg-docs { grid-column: 1 / -1; grid-row: 3; }
+	/* width chosen at หลังบ้าน → จัดหน้าแรก: full / left (wide column) / right (narrow column) */
+	.hg-cell[data-width="full"] { grid-column: 1 / -1; }
+	.hg-cell[data-width="left"] { grid-column: 1; }
+	.hg-cell[data-width="right"] { grid-column: 2; }
+	.hg-quick .quick-links { margin-top: 0; }
 
 	/* performance items in the news list: play mark over the picture */
 	.news-img img {
@@ -2200,16 +2217,10 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 			grid-template-columns: minmax(0, 1fr);
 		}
 
-		/* one column: calendar, then its events, then the rest */
-		.hg-cal, .hg-news, .hg-recruit, .hg-docs {
+		/* one column: same order as set in the admin */
+		.hg-cell[data-width] {
 			grid-column: 1;
-			grid-row: auto;
 		}
-
-		.hg-recruit { order: 1; }
-		.hg-news { order: 2; }
-		.hg-cal { order: 3; }
-		.hg-docs { order: 4; }
 
 		/* one column: no neighbour to match, so the list takes its natural height (fixed page size) */
 		.docs-card,
