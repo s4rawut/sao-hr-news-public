@@ -9,6 +9,8 @@ if [ ! -f data.db ]; then
 	echo "First start: copying initial content into /data"
 	cp /app/initial-data/data.db data.db
 	mkdir -p uploads && cp -R /app/initial-data/uploads/. uploads/
+	# a new server gets its own sign-in secret and no passwords from the handover copy
+	node --no-warnings -e "const d=new (require('node:sqlite').DatabaseSync)('data.db');d.exec(\"DELETE FROM options WHERE name='hr:session_secret'\");try{d.exec('UPDATE users SET password_hash = NULL')}catch{}"
 fi
 mkdir -p uploads data sessions
 # database patches that come with this version (each runs once; see patches/README.md)
