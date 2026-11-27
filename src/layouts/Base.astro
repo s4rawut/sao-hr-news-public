@@ -229,6 +229,8 @@ const badgeColor = BADGE_COLORS[info.status_badge_color as string] ?? BADGE_COLO
 											aria-current={isActive(item.url) ? "page" : undefined}
 										>
 											{item.label}
+											{/* ข่าวรับสมัครสอบ: a blinking "ใหม่" mark, always on */}
+											{item.url === "/recruitments" && <span class="nav-new">ใหม่</span>}
 										</a>
 									</li>
 								),
@@ -697,6 +699,26 @@ const badgeColor = BADGE_COLORS[info.status_badge_color as string] ?? BADGE_COLO
 
 	.main-nav .has-sub {
 		position: relative;
+	}
+
+	.main-nav .nav-new {
+		display: inline-block;
+		margin-left: 5px;
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: #e11d48;
+		color: #fff;
+		font-size: 0.68rem;
+		font-weight: 700;
+		line-height: 1.5;
+		vertical-align: 2px;
+		animation: nav-new-blink 1s steps(1, end) infinite;
+	}
+
+	@keyframes nav-new-blink {
+		50% {
+			opacity: 0;
+		}
 	}
 
 	.main-nav .sub-menu {

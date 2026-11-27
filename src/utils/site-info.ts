@@ -16,7 +16,7 @@ const defaults = {
 	heading_performance_tab: "ผลการดำเนินการของ สบท.",
 	heading_recruitments: "ข่าวรับสมัครสอบ",
 	heading_news: "ข่าวประชาสัมพันธ์",
-	heading_documents: "ประกาศ/คำสั่ง/ระเบียบ/หลักเกณฑ์/บันทึกข้อความ/คู่มือ",
+	heading_documents: "คลังข้อมูล",
 	heading_calendar: "ปฏิทินกิจกรรม",
 	news_limit: 9,
 	documents_limit: 8,
