@@ -9,7 +9,6 @@ import {
 import { Image } from "emdash/ui";
 import Icon from "../components/Icon.astro";
 import RecruitLevels from "../components/RecruitLevels.astro";
-import VideoPlayer from "../components/VideoPlayer.astro";
 import EntryBanner from "../components/EntryBanner.astro";
 import WelcomePopup from "../components/WelcomePopup.astro";
 import Base from "../layouts/Base.astro";
@@ -88,8 +87,7 @@ const heroRatio =
 	info.hero_image?.width && info.hero_image?.height ? `${info.hero_image.width} / ${info.hero_image.height}` : "2.9 / 1";
 const quickLinks = sortByOrder(quickResult.entries);
 
-// Latest monthly performance video is featured; the next few are listed beside it.
-const [latestPerf, ...olderPerf] = perfResult.entries;
+// ผลการดำเนินการประจำเดือน: the latest months join the ข่าวประชาสัมพันธ์ list, after the pinned items.
 const perfMonth = (e: (typeof perfResult.entries)[number]) =>
 	formatThaiMonth(new Date(e.data.report_month as unknown as string));
 const perfThumb = (e: (typeof perfResult.entries)[number]) => {
@@ -132,6 +130,9 @@ type NewsItem = {
 	title: string;
 	href: string;
 	image?: (typeof news)[number]["data"]["featured_image"];
+	/** picture by address (performance poster / video thumbnail), when there is no image object */
+	imageUrl?: string;
+	video?: boolean;
 	date?: Date;
 	label?: string;
 	edit?: Record<string, unknown>;
@@ -163,8 +164,23 @@ const newsItems: NewsItem[] = [
 		order: g.data.featured_order as number,
 	})),
 ].sort((a, b) => a.order - b.order || (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));
-const headline = newsItems.slice(0, 5);
-const newsGridCount = Math.min(4, Math.max(0, headline.length - 1));
+// then the newest months of ผลการดำเนินการ (newest first), each linking to its video page
+newsItems.push(
+	...perfResult.entries.map((e) => ({
+		key: e.data.id,
+		title: e.data.title,
+		href: `/performance/${encodeURIComponent(e.id)}`,
+		imageUrl: perfThumb(e),
+		video: true,
+		date: new Date(e.data.report_month as unknown as string),
+		label: `ผลการดำเนินการ ${perfMonth(e)}`,
+		edit: e.edit.title as Record<string, unknown>,
+		isNew: false,
+		order: Infinity,
+	})),
+);
+const headline = newsItems.slice(0, 9);
+const newsGridCount = Math.min(8, Math.max(0, headline.length - 1));
 const newsSlides = headline.slice(0, 1);
 const newsGrid = headline.slice(1, 1 + newsGridCount);
 
@@ -280,50 +296,110 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 			)
 		}
 
-		{/* Two columns, three rows: performance | calendar, news | events of the month, recruitment | คลังข้อมูล */}
+		{/* ข่าวรับสมัครสอบ across the top, then ข่าวประชาสัมพันธ์ | ปฏิทินกิจกรรม, then the documents across */}
 		<div class="home-grid">
-			{latestPerf && (
-				<section class="hg-cell hg-perf" id="performance">
+			{recruitData.levels.length > 0 && (
+				<section class="hg-cell hg-recruit" id="recruit">
 					<h2 class="section-title">
-						{info.heading_performance_tab}
-						<a href="/performance" class="see-all">ดูทั้งหมด</a>
+						{info.heading_recruitments}
+						<a href="/recruitments" class="see-all">ดูทั้งหมด</a>
 					</h2>
-						<div class:list={["perf card", { single: olderPerf.length === 0 }]}>
-							<div class="perf-main">
-								<VideoPlayer title={latestPerf.data.title} data={latestPerf.data} />
-								<div class="perf-text">
-									<h3 {...latestPerf.edit.title}>{latestPerf.data.title}</h3>
-									{latestPerf.data.description && (
-										<p {...latestPerf.edit.description}>{latestPerf.data.description}</p>
-									)}
-								</div>
-							</div>
-							{olderPerf.length > 0 && (
-								<aside class="perf-list">
-									<h3>เดือนก่อนหน้า</h3>
-									<ul>
-										{olderPerf.map((e) => {
-											const thumb = perfThumb(e);
-											return (
-												<li>
-													<a href={`/performance/${encodeURIComponent(e.id)}`}>
-														<span class="perf-thumb" style={thumb ? `background-image:url("${thumb}")` : undefined}>
-															<Icon name="play" size={16} />
-														</span>
-														<span>
-															<small>{perfMonth(e)}</small>
-															<strong>{e.data.title}</strong>
-														</span>
-													</a>
-												</li>
-											);
-										})}
-									</ul>
-								</aside>
-							)}
-						</div>
+					<RecruitLevels types={recruitData.types} stageOf={recruitData.stageOf} />
 				</section>
 			)}
+
+			<section class="hg-cell hg-news" id="news">
+				<h2 class="section-title">
+					{info.heading_news}
+					<a href="/posts" class="see-all">ดูทั้งหมด</a>
+				</h2>
+				{
+					headline.length === 0 ? (
+						<div class="card">
+							<p class="empty">ยังไม่มีข่าวประชาสัมพันธ์</p>
+						</div>
+					) : (
+						<div>
+							<div class:list={["news-top", { "no-grid": newsGrid.length === 0 }]} data-news-all>
+								<div class="news-feature card" data-slider>
+									{newsSlides.map((item, i) => (
+										<a href={item.href} class="feature-slide" data-slide hidden={i !== 0}>
+											<span class="news-img feature-img">
+												{item.image ? (
+													<Image image={item.image} alt={item.image.alt || ""} loading={i === 0 ? "eager" : "lazy"} />
+												) : item.imageUrl ? (
+													<img src={item.imageUrl} alt="" loading={i === 0 ? "eager" : "lazy"} />
+												) : (
+													<span class="news-ph" aria-hidden="true"><Icon name="office" size={64} /></span>
+												)}
+												{item.video && <span class="news-play" aria-hidden="true"><Icon name="play" size={28} /></span>}
+											</span>
+											<span class="feature-body">
+												<span class="feature-title" {...(item.edit ?? {})}>{item.title}</span>
+											</span>
+										</a>
+									))}
+									<div class="feature-meta">
+										{newsSlides.map((item, i) => (
+											<span class="news-meta" data-slide-meta hidden={i !== 0}>
+												{item.label && <span class="news-chip">{item.label}</span>}
+												{item.date && (
+													<time datetime={item.date.toISOString()}>
+														<Icon name="clock" size={14} /> {formatThaiAgo(item.date, now)}
+													</time>
+												)}
+												{item.isNew && <span class="badge-new">ใหม่</span>}
+											</span>
+										))}
+										{newsSlides.length > 1 && (
+											<span class="feature-pager" role="group" aria-label="เลือกข่าวเด่น">
+												{newsSlides.map((_, i) => (
+													<button type="button" data-goto={i} class:list={{ "is-active": i === 0 }} aria-label={`ข่าวเด่นที่ ${i + 1}`}>
+														{i + 1}
+													</button>
+												))}
+											</span>
+										)}
+									</div>
+								</div>
+
+								{newsGrid.length > 0 && (
+									<ul class="news-grid">
+										{newsGrid.map((item) => (
+											<li>
+												<a href={item.href} class="news-card">
+													<span class="news-img">
+														{item.image ? (
+															<Image image={item.image} alt={item.image.alt || ""} />
+														) : item.imageUrl ? (
+															<img src={item.imageUrl} alt="" loading="lazy" />
+														) : (
+															<span class="news-ph" aria-hidden="true"><Icon name="office" size={36} /></span>
+														)}
+														{item.video && <span class="news-play" aria-hidden="true"><Icon name="play" size={18} /></span>}
+													</span>
+													<span class="news-card-title" {...(item.edit ?? {})}>{item.title}</span>
+													<span class="news-meta">
+														{item.date && (
+															<time datetime={item.date.toISOString()}>
+																<Icon name="clock" size={13} /> {formatThaiAgo(item.date, now)}
+															</time>
+														)}
+														{item.label && <span class="news-cat">{item.label}</span>}
+														{item.isNew && <span class="badge-new">ใหม่</span>}
+													</span>
+												</a>
+											</li>
+										))}
+									</ul>
+								)}
+							</div>
+
+						</div>
+					)
+				}
+			</section>
+
 
 			<section class="hg-cell hg-cal" id="calendar">
 				<h2 class="section-title">
@@ -436,93 +512,6 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 				</div>
 			</section>
 
-			<section class="hg-cell hg-news" id="news">
-				<h2 class="section-title">
-					{info.heading_news}
-					<a href="/posts" class="see-all">ดูทั้งหมด</a>
-				</h2>
-				{
-					headline.length === 0 ? (
-						<div class="card">
-							<p class="empty">ยังไม่มีข่าวที่ปักหมุดไว้ — ปักหมุดได้ที่เรื่องในคลังข้อมูล หรือไฟล์เอกสารในหน้าเว็บ (ช่อง "ปักหมุดที่ข่าวประชาสัมพันธ์")</p>
-						</div>
-					) : (
-						<div>
-							<div class:list={["news-top", { "no-grid": newsGrid.length === 0 }]} data-news-all>
-								<div class="news-feature card" data-slider>
-									{newsSlides.map((item, i) => (
-										<a href={item.href} class="feature-slide" data-slide hidden={i !== 0}>
-											<span class="news-img feature-img">
-												{item.image ? (
-													<Image image={item.image} alt={item.image.alt || ""} loading={i === 0 ? "eager" : "lazy"} />
-												) : (
-													<span class="news-ph" aria-hidden="true"><Icon name="office" size={64} /></span>
-												)}
-											</span>
-											<span class="feature-body">
-												<span class="feature-title" {...(item.edit ?? {})}>{item.title}</span>
-											</span>
-										</a>
-									))}
-									<div class="feature-meta">
-										{newsSlides.map((item, i) => (
-											<span class="news-meta" data-slide-meta hidden={i !== 0}>
-												{item.label && <span class="news-chip">{item.label}</span>}
-												{item.date && (
-													<time datetime={item.date.toISOString()}>
-														<Icon name="clock" size={14} /> {formatThaiAgo(item.date, now)}
-													</time>
-												)}
-												{item.isNew && <span class="badge-new">ใหม่</span>}
-											</span>
-										))}
-										{newsSlides.length > 1 && (
-											<span class="feature-pager" role="group" aria-label="เลือกข่าวเด่น">
-												{newsSlides.map((_, i) => (
-													<button type="button" data-goto={i} class:list={{ "is-active": i === 0 }} aria-label={`ข่าวเด่นที่ ${i + 1}`}>
-														{i + 1}
-													</button>
-												))}
-											</span>
-										)}
-									</div>
-								</div>
-
-								{newsGrid.length > 0 && (
-									<ul class="news-grid">
-										{newsGrid.map((item) => (
-											<li>
-												<a href={item.href} class="news-card">
-													<span class="news-img">
-														{item.image ? (
-															<Image image={item.image} alt={item.image.alt || ""} />
-														) : (
-															<span class="news-ph" aria-hidden="true"><Icon name="office" size={36} /></span>
-														)}
-													</span>
-													<span class="news-card-title" {...(item.edit ?? {})}>{item.title}</span>
-													<span class="news-meta">
-														{item.date && (
-															<time datetime={item.date.toISOString()}>
-																<Icon name="clock" size={13} /> {formatThaiAgo(item.date, now)}
-															</time>
-														)}
-														{item.label && <span class="news-cat">{item.label}</span>}
-														{item.isNew && <span class="badge-new">ใหม่</span>}
-													</span>
-												</a>
-											</li>
-										))}
-									</ul>
-								)}
-							</div>
-
-						</div>
-					)
-				}
-			</section>
-
-
 			<section class="hg-cell hg-docs docs" id="docs" data-limit={info.documents_limit} data-see-all={docsSeeAll}>
 				<h2 class="section-title">
 					{info.heading_documents}
@@ -538,7 +527,7 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 					)}
 					<a href={docsSeeAll} class="see-all" data-docs-see-all>ดูทั้งหมด</a>
 				</h2>
-					<div class="tabs" role="tablist" aria-label="หมวดหมู่คลังข้อมูล" hidden={documentCategories.length === 0}>
+					<div class="tabs" role="tablist" aria-label="หมวดหมู่เอกสาร" hidden={documentCategories.length === 0}>
 						{
 							documentCategories.map((c) => (
 								<button type="button" class:list={["button", { "is-active": c.slug === docsDefault }]} data-filter={c.slug} data-default={c.slug === docsDefault ? "" : undefined} role="tab" aria-selected={c.slug === docsDefault ? "true" : "false"}>
@@ -571,23 +560,13 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 							}
 						</ul>
 						<p class="empty" data-empty hidden>ยังไม่มีรายการในหมวดนี้</p>
-						<nav class="docs-pager" data-docs-pager aria-label="หน้าคลังข้อมูล" hidden>
+						<nav class="docs-pager" data-docs-pager aria-label="หน้ารายการเอกสาร" hidden>
 							<button type="button" class="pg-btn" data-pg-step="-1" aria-label="หน้าก่อนหน้า"><Icon name="chevron-left" size={14} /></button>
 							<span class="pg-info" data-pg-info></span>
 							<button type="button" class="pg-btn" data-pg-step="1" aria-label="หน้าถัดไป"><Icon name="chevron-right" size={14} /></button>
 						</nav>
 					</div>
 			</section>
-
-			{recruitData.levels.length > 0 && (
-				<section class="hg-cell hg-recruit" id="recruit">
-					<h2 class="section-title">
-						{info.heading_recruitments}
-						<a href="/recruitments" class="see-all">ดูทั้งหมด</a>
-					</h2>
-					<RecruitLevels types={recruitData.types} stageOf={recruitData.stageOf} />
-				</section>
-			)}
 
 		</div>
 	</div>
@@ -737,12 +716,12 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		}
 	}
 
-	// คลังข้อมูล: category chips (no "ทั้งหมด" – that is the ดูทั้งหมด link) and pages sized to the box,
-	// which is as tall as the news beside it. In one column a page is "documents_limit" items.
+	// ประกาศ/คำสั่ง/…: category chips (no "ทั้งหมด" – that is the ดูทั้งหมด link). The list is full
+	// width, so a page is always "documents_limit" items.
 	const section = document.querySelector<HTMLElement>(".docs");
 	if (section) {
 		const PAGE_ITEMS = Number(section.dataset.limit) || 8;
-		const oneColumn = matchMedia("(max-width: 1000px)");
+		const oneColumn = { matches: true, addEventListener: () => {} };
 		const buttons = [...section.querySelectorAll<HTMLButtonElement>("[data-filter]")];
 		const items = [...section.querySelectorAll<HTMLLIElement>("li[data-cat]")];
 		const list = section.querySelector<HTMLElement>("[data-docs-list]")!;
@@ -1847,7 +1826,7 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		color: var(--color-primary-dark);
 	}
 
-	/* Homepage grid: left = performance / news / recruitment, right = calendar / events / คลังข้อมูล */
+	/* Homepage grid: ข่าวรับสมัครสอบ across; news | calendar; documents across */
 	.home-grid {
 		display: grid;
 		grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
@@ -1861,24 +1840,32 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		margin-top: 0;
 	}
 
-	.hg-perf { grid-column: 1; grid-row: 1; }
-	.hg-cal { grid-column: 2; grid-row: 1; }
+	.hg-recruit { grid-column: 1 / -1; grid-row: 1; }
 	.hg-news { grid-column: 1; grid-row: 2; }
-	.hg-docs { grid-column: 2; grid-row: 2; }
-	.hg-recruit { grid-column: 1 / -1; grid-row: 3; }
+	.hg-cal { grid-column: 2; grid-row: 2; }
+	.hg-docs { grid-column: 1 / -1; grid-row: 3; }
+
+	/* performance items in the news list: play mark over the picture */
+	.news-img img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.news-play {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		color: #fff;
+		background: rgb(0 0 0 / 0.18);
+		pointer-events: none;
+	}
 
 
 	.home-grid [hidden] {
 		display: none !important;
-	}
-
-	/* performance: the video takes the column; earlier months list under it */
-	.hg-perf .perf {
-		grid-template-columns: minmax(0, 1fr);
-	}
-
-	.hg-perf .perf-list ul {
-		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 	}
 
 	/* clickable calendar days: hover shows the events, click lists them in the box below */
@@ -2065,9 +2052,8 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		gap: 18px 16px;
 	}
 
-	/* คลังข้อมูล: same height as the news next to it; extra items go to the next page */
+	/* documents: full width, fixed page size */
 	.hg-docs {
-		align-self: stretch;
 		display: flex;
 		flex-direction: column;
 	}
@@ -2152,32 +2138,18 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		opacity: 0.45;
 	}
 
-	/* all six categories on one line in the narrow column */
 	.hg-docs .tabs {
-		flex-wrap: nowrap;
-		gap: 4px;
-	}
-
-	.hg-docs .tabs .button {
-		flex: 0 1 auto;
-		min-width: 0;
-		padding: 3px 8px;
-		font-size: 0.66rem;
-		white-space: nowrap;
+		flex-wrap: wrap;
+		gap: 8px;
 	}
 
 	.docs-card {
-		flex: 1 1 0;
-		min-height: 0;
 		display: flex;
 		flex-direction: column;
 	}
 
-	/* height 0 + grow: the list never makes the row taller, it fills what the news leaves */
 	.docs-card .item-list {
-		flex: 1 1 0;
-		min-height: 0;
-		overflow: hidden;
+		flex: none;
 	}
 
 	.docs-card .item-list li.pg-first {
@@ -2229,16 +2201,15 @@ const calMonths = Array.from({ length: toIdx - fromIdx + 1 }, (_, n) => {
 		}
 
 		/* one column: calendar, then its events, then the rest */
-		.hg-perf, .hg-cal, .hg-news, .hg-recruit, .hg-docs {
+		.hg-cal, .hg-news, .hg-recruit, .hg-docs {
 			grid-column: 1;
 			grid-row: auto;
 		}
 
-		.hg-perf { order: 1; }
-		.hg-cal { order: 2; }
-		.hg-news { order: 3; }
+		.hg-recruit { order: 1; }
+		.hg-news { order: 2; }
+		.hg-cal { order: 3; }
 		.hg-docs { order: 4; }
-		.hg-recruit { order: 5; }
 
 		/* one column: no neighbour to match, so the list takes its natural height (fixed page size) */
 		.docs-card,

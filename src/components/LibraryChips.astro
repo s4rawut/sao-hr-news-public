@@ -16,7 +16,7 @@ if (Astro.cache?.enabled) Astro.cache.set(terms.cacheHint);
 const chips = [{ href: "/posts", slug: "", label: "ทั้งหมด" }, ...terms.data.map((t) => ({ href: `/category/${encodeURIComponent(t.slug)}`, slug: t.slug, label: t.label }))];
 ---
 
-<nav class="lib-chips" aria-label="หมวดหมู่คลังข้อมูล">
+<nav class="lib-chips" aria-label="หมวดหมู่เอกสาร">
 	{
 		chips.map((c) => (
 			<a href={c.href} class:list={["button", { "is-active": c.slug === current }]} aria-current={c.slug === current ? "page" : undefined}>

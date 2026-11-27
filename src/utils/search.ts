@@ -93,7 +93,7 @@ async function collectCandidates(): Promise<Candidate[]> {
 			sortDate: postDate(p)?.getTime(),
 			hit: {
 				type: "post",
-				typeLabel: "คลังข้อมูล",
+				typeLabel: "ประกาศ/คำสั่ง/ระเบียบ/หลักเกณฑ์/บันทึกข้อความ/คู่มือ",
 				title: p.data.title,
 				url: `/posts/${encodeURIComponent(p.id)}`,
 				date: postDate(p) ? formatThaiShort(postDate(p)!) : undefined,
