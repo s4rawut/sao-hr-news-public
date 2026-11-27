@@ -2,6 +2,7 @@
 import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { all, get, nowIso, run, touch, ulid, UPLOADS_DIR } from "../cms/db";
 import { mediaFileUrl, mimeFromName, uploadPath } from "../cms/media";
+import { DEMO_MAX_UPLOAD, isDemo } from "./demo";
 
 export const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // videos up to 200 MB
 
@@ -57,6 +58,7 @@ export function saveUpload(file: File, buf: Buffer, authorId: string): MediaRow 
 	const ext = (name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 	if (!ext || BLOCKED_EXT.has(ext)) throw new Error(`ไม่รับไฟล์ชนิดนี้ (${name})`);
 	if (buf.length > MAX_UPLOAD_BYTES) throw new Error(`ไฟล์ใหญ่เกิน 200 MB (${name})`);
+	if (isDemo() && buf.length > DEMO_MAX_UPLOAD) throw new Error(`เว็บตัวอย่างอัปโหลดได้ไม่เกิน 5 MB (${name})`);
 	const id = ulid();
 	const key = `${id}.${ext}`;
 	const mime = file.type && file.type !== "application/octet-stream" ? file.type : mimeFromName(name);

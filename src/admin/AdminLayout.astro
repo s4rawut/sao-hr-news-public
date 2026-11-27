@@ -5,6 +5,7 @@ import AdminIcon from "./AdminIcon.astro";
 import { navGroups } from "./nav";
 import { getSiteSettings } from "../lib/cms";
 import { roleName } from "../lib/admin/auth";
+import { isDemo } from "../lib/admin/demo";
 
 interface Props {
 	title: string;
@@ -106,6 +107,7 @@ const manage = [
 					</details>
 				)}
 			</header>
+			{isDemo() && <div class="adm-flash ok" style="background: var(--a-warn-soft); border-color: #fedf89; color: #93370d">เว็บตัวอย่าง: ทดลองแก้ได้ทุกอย่าง ข้อมูลจะกลับเป็นค่าตั้งต้นเมื่อระบบพักเครื่อง · อัปโหลดไฟล์ได้ไม่เกิน 5 MB</div>}
 			{flashMsg && <div class:list={["adm-flash", flashMsg.kind]} role="status" data-flash>{flashMsg.text}</div>}
 			<main class:list={["adm-content", { wide }]}>
 				<slot />

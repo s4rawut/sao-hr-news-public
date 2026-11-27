@@ -27,6 +27,8 @@ export default defineConfig({
 			{ hostname: "**.audit.go.th" },
 			{ hostname: "localhost" },
 			{ hostname: "127.0.0.1" },
+			// the public demo copy on Render (render.yaml); a browser has to open that address to use it
+			{ hostname: "**.onrender.com" },
 		],
 	},
 });

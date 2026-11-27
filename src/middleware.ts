@@ -3,7 +3,7 @@ import { MEDIA_PREFIX, serveUpload } from "./lib/cms/media";
 import { currentUser } from "./lib/admin/auth";
 
 /** /admin pages anyone may open (sign-in, sign-in links, invites). */
-const PUBLIC_ADMIN = [/^\/admin\/login\/?$/, /^\/admin\/auth\//, /^\/admin\/invite\/?$/, /^\/admin\/api\/passkey\/login/];
+const PUBLIC_ADMIN = [/^\/admin\/login\/?$/, /^\/admin\/auth\//, /^\/admin\/invite\/?$/, /^\/admin\/api\/passkey\/login/, /^\/admin\/api\/demo-login$/];
 
 export const onRequest = defineMiddleware(async (context, next) => {
 	const { pathname } = context.url;
@@ -38,5 +38,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 		res.headers.set("X-Frame-Options", "SAMEORIGIN");
 		return res;
 	}
-	return next();
+	const res = await next();
+	if (process.env.DEMO_MODE === "1") res.headers.set("X-Robots-Tag", "noindex, nofollow");
+	return res;
 });

@@ -1,0 +1,15 @@
+# Render.com blueprint: a public DEMO copy of the site with sample data (resets when the free
+# instance sleeps). Not for production — IT installs the Docker image per DEPLOY-IT.md.
+services:
+  - type: web
+    name: hr-sao-demo
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: DEMO_MODE
+        value: "1"
+      - key: PORT
+        value: "4321"
