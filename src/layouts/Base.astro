@@ -1,9 +1,8 @@
 ---
 import { siteLink } from "../utils/site-link";
 import FilePreview from "../components/FilePreview.astro";
-import { getEmDashCollection, getMenuWithCacheHint, getSiteSettingsWithCacheHint } from "emdash";
-import { EmDashHead, EmDashBodyStart, EmDashBodyEnd } from "emdash/ui";
-import { createPublicPageContext } from "emdash/page";
+import { getEmDashCollection, getMenuWithCacheHint, getSiteSettingsWithCacheHint } from "../lib/cms";
+import EmDashHead from "../components/cms/Head.astro";
 import Icon from "../components/Icon.astro";
 import Logo from "../components/Logo.astro";
 import { getSiteInfo, mediaUrl } from "../utils/site-info";
@@ -145,18 +144,13 @@ const searchQuery = pathname === "/search" ? (Astro.url.searchParams.get("q") ??
 const visits = info.show_visitor_counter ? countVisit(Astro.cookies) : null;
 const thaiYear = bangkokParts(new Date()).year + 543;
 
-const pageCtx = createPublicPageContext({
-	Astro,
-	kind: content ? "content" : "custom",
-	pageType: "website",
-	title: fullTitle,
-	pageTitle: pageTitle ?? title,
+const pageCtx = {
+	title: pageTitle ?? title,
 	description: pageDescription,
 	canonical,
 	image,
-	content,
 	siteName: siteTitle,
-});
+};
 // "สีป้ายสถานะใน footer"
 const BADGE_COLORS: Record<string, string> = {
 	เหลือง: "#d9a400",
@@ -180,7 +174,6 @@ const badgeColor = BADGE_COLORS[info.status_badge_color as string] ?? BADGE_COLO
 		<EmDashHead page={pageCtx} />
 	</head>
 	<body>
-		<EmDashBodyStart page={pageCtx} />
 
 		<header class="site-header">
 			<div class="container header-inner">
@@ -355,7 +348,6 @@ const badgeColor = BADGE_COLORS[info.status_badge_color as string] ?? BADGE_COLO
 			</div>
 		</footer>
 
-		<EmDashBodyEnd page={pageCtx} />
 
 		<script>
 			const header = document.querySelector(".site-header");

@@ -1,0 +1,42 @@
+---
+/**
+ * Image from a content field (replaces EmDash's <Image>). Local uploads are served from
+ * /_emdash/api/media/file/<storageKey>; width/height come from the stored value so the page
+ * does not jump while loading.
+ */
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends Omit<HTMLAttributes<"img">, "src" | "width" | "height"> {
+	image: Record<string, any> | string | null | undefined;
+	alt?: string;
+	width?: number;
+	height?: number;
+	priority?: boolean;
+}
+
+const { image, alt, width, height, priority, loading, ...attrs } = Astro.props;
+const img = typeof image === "string" ? { src: image } : image;
+const key = img?.meta?.storageKey;
+const src: string | undefined =
+	typeof key === "string" ? `/_emdash/api/media/file/${key}` : (img?.src ?? img?.url ?? undefined);
+const w = width ?? (typeof img?.width === "number" ? img.width : undefined);
+const h = height ?? (typeof img?.height === "number" ? img.height : undefined);
+const fx = typeof img?.focalPoint?.x === "number" ? img.focalPoint.x : undefined;
+const fy = typeof img?.focalPoint?.y === "number" ? img.focalPoint.y : undefined;
+const style = fx !== undefined && fy !== undefined ? `object-position: ${fx * 100}% ${fy * 100}%` : undefined;
+---
+
+{
+	src && (
+		<img
+			src={src}
+			alt={alt ?? img?.alt ?? ""}
+			width={w}
+			height={h}
+			loading={priority ? "eager" : (loading ?? "lazy")}
+			decoding="async"
+			style={style}
+			{...attrs}
+		/>
+	)
+}

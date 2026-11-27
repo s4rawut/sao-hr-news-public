@@ -1,0 +1,150 @@
+---
+/**
+ * One form field of the edit page, chosen by the field's type (and widget). Complex fields
+ * (image/file, rich text, repeater, reference) keep their value as JSON in a hidden input and
+ * are made interactive by fields-client.ts.
+ */
+import type { FieldDef } from "../lib/cms/schema";
+import { dateInputValue, referenceChoices } from "../lib/admin/content";
+import { all } from "../lib/cms/db";
+import AdminIcon from "./AdminIcon.astro";
+
+interface Props {
+	field: FieldDef;
+	value: unknown;
+	refs?: string[];
+}
+const { field: f, value, refs = [] } = Astro.props;
+const name = `f:${f.slug}`;
+const id = `fld-${f.slug}`;
+const str = (v: unknown) => (v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v));
+const dateOnly = f.widget === "thai-date:date";
+const dateValue = dateInputValue(value, dateOnly);
+const selectOptions: string[] = (f.validation.options as string[] | undefined) ?? ((f.options as { options?: string[] }).options ?? []);
+const allowed = f.validation.allowedMimeTypes ?? [];
+const accept = f.type === "image" ? "image/*" : allowed.join(",");
+const media = (value && typeof value === "object" ? value : null) as Record<string, any> | null;
+const mediaSrc = media?.meta?.storageKey ? `/_emdash/api/media/file/${media.meta.storageKey}` : media?.src;
+const isImg = media && (f.type === "image" || String(media.mimeType ?? "").startsWith("image/"));
+const refTarget = f.validation.targetCollection;
+const refOptions = f.type === "reference" && refTarget ? referenceChoices(refTarget) : [];
+const refMax = f.type === "reference" && f.validation.relation
+	? (all<{ m: number | null }>(`SELECT max_children_per_parent m FROM _emdash_relations WHERE slug = ?`, f.validation.relation)[0]?.m ?? null)
+	: null;
+const eventTypes = f.widget === "thai-date:eventtype" ? all<{ title: string }>(`SELECT title FROM ec_event_types WHERE deleted_at IS NULL ORDER BY coalesce(sort_order, 999), title`) : [];
+---
+
+<div class="field" data-field={f.slug} data-type={f.type}>
+	{f.type !== "boolean" && (
+		<label for={id}>
+			{f.label}
+			{f.required && <span class="req"> *</span>}
+		</label>
+	)}
+
+	{
+		(f.type === "string" && f.widget === "thai-date:color") ? (
+			<div style="display: flex; gap: 8px; align-items: center">
+				<input type="color" value={/^#[0-9a-f]{6}$/i.test(str(value)) ? str(value) : "#0f6f87"} data-color-for={id} style="width: 52px; height: 38px; padding: 2px" />
+				<input id={id} type="text" name={name} value={str(value)} required={f.required} placeholder="#0f6f87" />
+			</div>
+		) : f.type === "string" && f.widget === "thai-date:eventtype" ? (
+			<select id={id} name={name} required={f.required}>
+				<option value="">— ไม่ระบุ —</option>
+				{eventTypes.map((t) => <option selected={t.title === value}>{t.title}</option>)}
+				{value && !eventTypes.some((t) => t.title === value) && <option selected>{str(value)}</option>}
+			</select>
+		) : f.type === "string" || f.type === "url" ? (
+			<input id={id} type={f.type === "url" ? "url" : "text"} name={name} value={str(value)} required={f.required} />
+		) : f.type === "text" ? (
+			<textarea id={id} name={name} required={f.required} rows="4">{str(value)}</textarea>
+		) : f.type === "integer" || f.type === "number" ? (
+			<input id={id} type="number" step={f.type === "integer" ? "1" : "any"} name={name} value={str(value)} required={f.required} style="max-width: 220px" />
+		) : f.type === "boolean" ? (
+			<label class="check"><input id={id} type="checkbox" name={name} checked={value === true || value === 1 || value === "1"} /> {f.label}</label>
+		) : f.type === "datetime" ? (
+			<div style="display: flex; gap: 8px; align-items: center">
+				<input id={id} type={dateOnly ? "date" : "datetime-local"} name={name} value={dateValue} required={f.required} style="max-width: 240px" data-thai-date />
+				<span class="muted small" data-thai-label></span>
+			</div>
+		) : f.type === "select" ? (
+			<select id={id} name={name} required={f.required}>
+				{!f.required && <option value="">— ไม่ระบุ —</option>}
+				{selectOptions.map((o) => <option selected={o === value}>{o}</option>)}
+				{value && !selectOptions.includes(String(value)) && <option selected>{str(value)}</option>}
+			</select>
+		) : f.type === "image" || f.type === "file" ? (
+			<div class="media-field" data-media-field data-kind={f.type} data-accept={accept}>
+				<input type="hidden" name={name} value={media ? JSON.stringify(media) : ""} data-value />
+				<div class="media-thumb" data-thumb>
+					{isImg && mediaSrc ? <img src={mediaSrc} alt="" /> : <AdminIcon name={f.type === "image" ? "image" : "doc"} size={26} />}
+				</div>
+				<div class="media-info" data-info>
+					{media ? (
+						<>
+							<strong>{media.filename ?? "ไฟล์"}</strong>
+							{mediaSrc && <div><a href={mediaSrc} target="_blank" rel="noopener">เปิดดู</a></div>}
+						</>
+					) : (
+						<span class="muted">ยังไม่ได้เลือก{f.type === "image" ? "รูป" : "ไฟล์"}</span>
+					)}
+				</div>
+				<div class="media-actions">
+					<button type="button" class="btn sm" data-pick><AdminIcon name="image" size={14} /> เลือก / อัปโหลด</button>
+					<button type="button" class="btn sm ghost" data-clear hidden={!media}><AdminIcon name="close" size={14} /> เอาออก</button>
+				</div>
+				{f.type === "image" && (
+					<div style="flex-basis: 100%">
+						<input type="text" placeholder="คำอธิบายรูป (alt) — อ่านออกเสียงให้ผู้พิการทางสายตา" value={media?.alt ?? ""} data-alt />
+					</div>
+				)}
+			</div>
+		) : f.type === "portableText" ? (
+			<div class="rte" data-rte>
+				<input type="hidden" name={name} value={value ? JSON.stringify(value) : "[]"} data-value />
+				<div class="rte-bar">
+					<select data-block title="รูปแบบย่อหน้า">
+						<option value="p">ข้อความ</option>
+						<option value="h2">หัวข้อใหญ่</option>
+						<option value="h3">หัวข้อย่อย</option>
+						<option value="blockquote">ข้อความอ้างอิง</option>
+					</select>
+					<span class="sep"></span>
+					<button type="button" data-cmd="bold" title="ตัวหนา"><b>B</b></button>
+					<button type="button" data-cmd="italic" title="ตัวเอียง"><i>I</i></button>
+					<button type="button" data-cmd="underline" title="ขีดเส้นใต้"><u>U</u></button>
+					<button type="button" data-cmd="strikeThrough" title="ขีดฆ่า"><s>S</s></button>
+					<span class="sep"></span>
+					<button type="button" data-cmd="insertUnorderedList" title="รายการแบบจุด">• รายการ</button>
+					<button type="button" data-cmd="insertOrderedList" title="รายการแบบตัวเลข">1. รายการ</button>
+					<span class="sep"></span>
+					<button type="button" data-link title="ใส่ลิงก์"><AdminIcon name="link" size={15} /></button>
+					<button type="button" data-cmd="unlink" title="เอาลิงก์ออก">ลบลิงก์</button>
+					<span class="sep"></span>
+					<button type="button" data-insert="image" title="แทรกรูป"><AdminIcon name="image" size={15} /> รูป</button>
+					<button type="button" data-insert="file" title="แทรกไฟล์ให้ดาวน์โหลด"><AdminIcon name="doc" size={15} /> ไฟล์</button>
+					<span class="sep"></span>
+					<button type="button" data-cmd="removeFormat" title="ล้างรูปแบบ">ล้างรูปแบบ</button>
+				</div>
+				<div class="rte-body" contenteditable="true" data-body data-placeholder="พิมพ์เนื้อหาที่นี่…" id={id}></div>
+			</div>
+		) : f.type === "repeater" ? (
+			<div data-repeater data-subfields={JSON.stringify(f.validation.subFields ?? [])}>
+				<input type="hidden" name={name} value={Array.isArray(value) ? JSON.stringify(value) : "[]"} data-value />
+				<div class="rep-list" data-list></div>
+				<button type="button" class="btn sm" data-add style="margin-top: 10px"><AdminIcon name="plus" size={14} /> เพิ่มรายการ</button>
+			</div>
+		) : f.type === "reference" ? (
+			<div data-reference data-max={refMax ?? ""} data-options={JSON.stringify(refOptions)}>
+				<input type="hidden" name={`r:${f.slug}`} value={refs.join(",")} data-value />
+				<div class="ref-picked" data-picked></div>
+				<select data-add-ref id={id}>
+					<option value="">+ เลือก…</option>
+					{refOptions.map((o) => <option value={o.id}>{o.title}{o.status !== "published" ? " (ร่าง)" : ""}</option>)}
+				</select>
+			</div>
+		) : (
+			<textarea id={id} name={name} rows="6" style="font-family: monospace; font-size: 0.82rem">{str(value)}</textarea>
+		)
+	}
+</div>

@@ -1,0 +1,148 @@
+---
+import AdminLayout from "../../../../admin/AdminLayout.astro";
+import AdminIcon from "../../../../admin/AdminIcon.astro";
+import FieldInput from "../../../../admin/FieldInput.astro";
+import { collectionLabel } from "../../../../admin/nav";
+import { getCollectionDef } from "../../../../lib/cms/schema";
+import { getTaxonomyTerms } from "../../../../lib/cms/taxonomy";
+import { bangkokInput, loadEntry, saveEntry, taxonomiesFor, titleColumn, trashEntry } from "../../../../lib/admin/content";
+import { audit } from "../../../../lib/admin/auth";
+import { setFlash, thaiDateTime } from "../../../../admin/flash";
+
+const def = getCollectionDef(Astro.params.collection ?? "");
+if (!def) return new Response("ไม่พบหมวดนี้", { status: 404 });
+const user = Astro.locals.user!;
+const base = `/admin/c/${def.slug}`;
+const isNew = Astro.params.id === "new";
+const id = isNew ? null : (Astro.params.id ?? null);
+let error = "";
+let posted: FormData | undefined;
+
+if (Astro.request.method === "POST") {
+	posted = await Astro.request.formData();
+	try {
+		if (posted.get("_action") === "trash" && id) {
+			trashEntry(def, id);
+			audit(user.id, "content.trash", def.slug, id);
+			setFlash(Astro.cookies, "ok", "ย้ายไปถังขยะแล้ว");
+			return Astro.redirect(base, 303);
+		}
+		// contributors may only save drafts
+		if (user.role < 30 && posted.get("_action") === "publish") posted.set("_action", "draft");
+		const result = saveEntry(def, id, posted, user.id);
+		audit(user.id, result.created ? "content.create" : "content.update", def.slug, result.id, { action: posted.get("_action") });
+		const action = posted.get("_action");
+		setFlash(Astro.cookies, "ok", action === "publish" ? "บันทึกและเผยแพร่แล้ว" : action === "unpublish" ? "ยกเลิกการเผยแพร่แล้ว (เป็นฉบับร่าง)" : "บันทึกฉบับร่างแล้ว");
+		return Astro.redirect(`${base}/${result.id}`, 303);
+	} catch (e) {
+		error = (e as Error).message;
+	}
+}
+
+let entry;
+try {
+	entry = loadEntry(def, id);
+} catch {
+	return new Response("ไม่พบรายการนี้", { status: 404 });
+}
+// after a failed save, show what was typed
+if (posted) {
+	for (const f of def.fields) {
+		const v = posted.get(`f:${f.slug}`);
+		if (typeof v === "string") {
+			try {
+				entry.values[f.slug] = ["image", "file", "portableText", "repeater", "json"].includes(f.type) && v ? JSON.parse(v) : f.type === "boolean" ? v === "on" : v;
+			} catch {
+				entry.values[f.slug] = v;
+			}
+		} else if (f.type === "boolean") entry.values[f.slug] = false;
+	}
+}
+const row = entry.row;
+const taxonomies = taxonomiesFor(def.slug).map((t) => ({ ...t, terms: getTaxonomyTerms(t.name) }));
+const tcol = titleColumn(def);
+const title = isNew ? `เพิ่ม${collectionLabel(def)}` : String(entry.values[tcol] || row?.slug || "แก้ไข");
+const status = (row?.status as string) ?? "draft";
+const PUBLIC_URL: Record<string, string> = { posts: "/posts/{slug}", pages: "/{slug}", performance: "/performance/{slug}" };
+const pattern = def.urlPattern || PUBLIC_URL[def.slug];
+const viewUrl = row && status === "published" && pattern ? pattern.replace("{slug}", encodeURIComponent(String(row.slug || row.id))) : null;
+const pubLocal = bangkokInput(row?.published_at);
+const mainFields = def.fields;
+const flat = (terms: ReturnType<typeof getTaxonomyTerms>, depth = 0): { id: string; label: string; depth: number }[] =>
+	terms.flatMap((t) => [{ id: t.id, label: t.label, depth }, ...flat(t.children, depth + 1)]);
+---
+
+<AdminLayout title={title} active={`c:${def.slug}`} subtitle={collectionLabel(def)}>
+	<a slot="actions" class="btn" href={base}>← กลับไปรายการ</a>
+	{viewUrl && <a slot="actions" class="btn" href={viewUrl} target="_blank" rel="noopener"><AdminIcon name="external" size={15} /> ดูบนเว็บ</a>}
+
+	{error && <div class="adm-flash error" style="margin: 0 0 16px">{error}</div>}
+	{entry.hasPendingDraft && (
+		<div class="notice">รายการนี้มีการแก้ไขที่บันทึกไว้แต่ยังไม่ได้เผยแพร่ (จากหลังบ้านเดิม) — ฟอร์มด้านล่างแสดงฉบับแก้ไขนั้น กด "เผยแพร่" เพื่อให้ขึ้นเว็บ</div>
+	)}
+
+	<form method="post" data-guard id="entry-form">
+		<div class="edit-grid">
+			<div class="card card-pad">
+				{mainFields.map((f) => <FieldInput field={f} value={entry.values[f.slug]} refs={entry.refs[f.slug]} />)}
+			</div>
+
+			<aside class="edit-side">
+				<div class="card card-pad">
+					<h3>การเผยแพร่</h3>
+					<p class="small" style="margin: 0 0 12px">
+						สถานะ: <span class:list={["badge", status === "published" ? "published" : "draft"]}>{isNew ? "ใหม่" : status === "published" ? "เผยแพร่อยู่" : "ฉบับร่าง"}</span>
+					</p>
+					<div style="display: grid; gap: 8px">
+						{user.role >= 30 && <button class="btn primary" type="submit" name="_action" value="publish"><AdminIcon name="check" size={16} /> {status === "published" ? "บันทึก (เผยแพร่อยู่)" : "เผยแพร่"}</button>}
+						{status !== "published" || isNew ? (
+							<button class="btn" type="submit" name="_action" value="draft">บันทึกเป็นฉบับร่าง</button>
+						) : (
+							<button class="btn" type="submit" name="_action" value="unpublish" data-confirm="เอาออกจากหน้าเว็บ (เก็บเป็นฉบับร่าง)?">ยกเลิกการเผยแพร่</button>
+						)}
+					</div>
+					<div class="field" style="margin: 14px 0 0">
+						<label for="pub" class="small">วันเวลาเผยแพร่ (ใช้เรียงลำดับ)</label>
+						<input id="pub" type="datetime-local" name="_published_at" value={pubLocal} />
+					</div>
+					{row && (
+						<p class="muted small" style="margin: 12px 0 0">
+							สร้าง {thaiDateTime(row.created_at)}<br />แก้ไข {thaiDateTime(row.updated_at)}
+						</p>
+					)}
+				</div>
+
+				<div class="card card-pad">
+					<h3>ที่อยู่ (slug)</h3>
+					<input type="text" name="_slug" value={String(row?.slug ?? "")} placeholder="สร้างจากชื่อให้อัตโนมัติ" />
+					<p class="muted small" style="margin: 6px 0 0">ใช้เป็นส่วนท้ายของลิงก์ เว้นว่างได้</p>
+				</div>
+
+				{taxonomies.map((t) => (
+					<div class="card card-pad">
+						<h3>{t.label}</h3>
+						<div class="term-list">
+							{flat(t.terms).map((term) => (
+								<label class:list={["check", { child: term.depth > 0 }]} style={term.depth ? `padding-left: ${term.depth * 20}px` : undefined}>
+									<input type="checkbox" name={`t:${t.name}`} value={term.id} checked={(entry.terms[t.name] ?? []).includes(term.id)} /> {term.label}
+								</label>
+							))}
+							{t.terms.length === 0 && <span class="muted small">ยังไม่มีหมวด — เพิ่มได้ที่เมนู "หมวดหมู่"</span>}
+						</div>
+					</div>
+				))}
+
+				{row && (
+					<button class="btn danger" type="submit" name="_action" value="trash" formnovalidate data-confirm="ย้ายรายการนี้ไปถังขยะ?">
+						<AdminIcon name="trash" size={15} /> ย้ายไปถังขยะ
+					</button>
+				)}
+			</aside>
+		</div>
+	</form>
+</AdminLayout>
+
+<script>
+	import { initFields } from "../../../../admin/fields-client";
+	initFields();
+</script>

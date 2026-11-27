@@ -1,0 +1,60 @@
+---
+import AdminLayout from "../../admin/AdminLayout.astro";
+import AdminIcon from "../../admin/AdminIcon.astro";
+import { navGroups, collectionLabel } from "../../admin/nav";
+import { countEntries, listEntries } from "../../lib/admin/content";
+import { getCollectionDef, listCollectionDefs } from "../../lib/cms/schema";
+import { all } from "../../lib/cms/db";
+import { thaiDateTime } from "../../admin/flash";
+
+const groups = navGroups();
+const counts = new Map(listCollectionDefs().map((d) => [d.slug, countEntries(d)]));
+// recently edited, across all collections
+const recent = listCollectionDefs()
+	.flatMap((d) => listEntries(d, { perPage: 5 }).rows.map((r) => ({ ...r, collection: d.slug, label: collectionLabel(d) })))
+	.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
+	.slice(0, 12);
+const media = all<{ n: number }>(`SELECT count(*) n FROM media`)[0].n;
+---
+
+<AdminLayout title="แดชบอร์ด" active="dashboard" subtitle={`สวัสดี ${Astro.locals.user?.name || Astro.locals.user?.email}`}>
+	<a slot="actions" class="btn primary" href="/admin/c/posts/new"><AdminIcon name="plus" size={16} /> เพิ่มเรื่องในคลังข้อมูล</a>
+
+	<div class="card card-pad" style="margin-bottom: 20px">
+		<h2>แก้ไขล่าสุด</h2>
+		<div class="table-wrap">
+			<table class="list">
+				<thead><tr><th>ชื่อ</th><th>หมวด</th><th>สถานะ</th><th>แก้ไขเมื่อ</th></tr></thead>
+				<tbody>
+					{recent.map((r) => (
+						<tr>
+							<td class="title-cell"><a href={`/admin/c/${r.collection}/${r.id}`}>{String(r._title || r.slug || "(ไม่มีชื่อ)")}</a></td>
+							<td class="muted small">{r.label}</td>
+							<td><span class:list={["badge", r.status === "published" ? "published" : "draft"]}>{r.status === "published" ? "เผยแพร่" : "ฉบับร่าง"}</span></td>
+							<td class="muted small">{thaiDateTime(r.updated_at)}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+	</div>
+
+	{groups.map((g) => (
+		<section style="margin-bottom: 20px">
+			<h2 class="small muted" style="margin: 0 0 8px">{g.label}</h2>
+			<div class="stat-grid">
+				{g.items.map((i) => (
+					<a class="card stat" href={`/admin/c/${i.slug}`}>
+						<span class="ic"><AdminIcon name="file" /></span>
+						<span><strong>{counts.get(i.slug) ?? 0}</strong><span>{i.label}</span></span>
+					</a>
+				))}
+			</div>
+		</section>
+	))}
+	<section>
+		<div class="stat-grid">
+			<a class="card stat" href="/admin/media"><span class="ic"><AdminIcon name="image" /></span><span><strong>{media}</strong><span>ไฟล์และรูปภาพ</span></span></a>
+		</div>
+	</section>
+</AdminLayout>

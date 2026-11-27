@@ -21,7 +21,6 @@ WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/seed ./seed
 COPY --from=build /app/patches ./patches
 COPY --from=build /app/scripts ./scripts
 # content at handover time; copied into /data on the first start only

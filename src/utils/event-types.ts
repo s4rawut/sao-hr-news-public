@@ -1,4 +1,4 @@
-import { getEmDashCollection } from "emdash";
+import { getEmDashCollection } from "../lib/cms";
 
 /**
  * Event types and their calendar colours, from admin → "ประเภทกิจกรรม (สีในปฏิทิน)".

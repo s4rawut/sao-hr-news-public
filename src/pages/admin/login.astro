@@ -1,0 +1,38 @@
+---
+import BareLayout from "../../admin/BareLayout.astro";
+import { safeNext } from "../../admin/flash";
+import { getSiteSettings } from "../../lib/cms";
+
+if (Astro.locals.user) return Astro.redirect(safeNext(Astro.url.searchParams.get("next")), 302);
+const next = safeNext(Astro.url.searchParams.get("next"));
+const error = Astro.url.searchParams.get("error") ?? "";
+const settings = await getSiteSettings();
+---
+
+<BareLayout title="เข้าสู่ระบบหลังบ้าน">
+	<h1>เข้าสู่ระบบหลังบ้าน</h1>
+	<p class="muted">{settings.title as string}</p>
+	<button class="btn primary" type="button" data-login data-next={next}>เข้าสู่ระบบด้วย passkey</button>
+	<p class="login-err" data-err hidden={!error}>{error}</p>
+	<p class="muted small" style="margin-top: 22px">
+		ใช้ลายนิ้วมือ / Windows Hello / มือถือ ที่ลงทะเบียนไว้<br />
+		ยังไม่มี passkey หรือเปลี่ยนเครื่อง: ขอลิงก์เข้าสู่ระบบจากผู้ดูแลระบบ
+	</p>
+</BareLayout>
+
+<script>
+	import { loginWithPasskey } from "../../admin/webauthn-client";
+	const btn = document.querySelector<HTMLButtonElement>("[data-login]")!;
+	const err = document.querySelector<HTMLElement>("[data-err]")!;
+	btn.addEventListener("click", async () => {
+		btn.disabled = true;
+		err.hidden = true;
+		try {
+			await loginWithPasskey(btn.dataset.next || "/admin");
+		} catch (e) {
+			err.textContent = (e as Error).name === "NotAllowedError" ? "ยกเลิก หรือไม่พบ passkey ของเว็บนี้ในเครื่อง" : (e as Error).message;
+			err.hidden = false;
+			btn.disabled = false;
+		}
+	});
+</script>

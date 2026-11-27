@@ -8,8 +8,9 @@ import {
 	getSeoMeta,
 	decodeSlug,
 	getSiteSettings,
-} from "emdash";
-import { Image, PortableText } from "emdash/ui";
+} from "../../lib/cms";
+import Image from "../../components/cms/Image.astro";
+import PortableText from "../../components/cms/PortableText.astro";
 import Base from "../../layouts/Base.astro";
 import { resolveStarterSiteIdentity } from "../../utils/site-identity";
 import { formatThaiLong } from "../../utils/thai-date";

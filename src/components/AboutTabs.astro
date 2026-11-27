@@ -1,6 +1,7 @@
 ---
-import { getEmDashCollection } from "emdash";
-import { Image, PortableText } from "emdash/ui";
+import { getEmDashCollection } from "../lib/cms";
+import Image from "../components/cms/Image.astro";
+import PortableText from "../components/cms/PortableText.astro";
 import { getSiteInfo, mediaUrl } from "../utils/site-info";
 import { adminDateTime, formatThaiDate, formatThaiDuration } from "../utils/thai-date";
 import Icon from "./Icon.astro";

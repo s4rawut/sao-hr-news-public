@@ -1,0 +1,41 @@
+---
+import AdminLayout from "../../admin/AdminLayout.astro";
+import { getSiteSettings } from "../../lib/cms";
+import { get, run, touch } from "../../lib/cms/db";
+import { audit, relyingParty } from "../../lib/admin/auth";
+import { setFlash } from "../../admin/flash";
+
+if ((Astro.locals.user?.role ?? 0) < 50) return Astro.redirect("/admin", 302);
+if (Astro.request.method === "POST") {
+	const form = await Astro.request.formData();
+	for (const key of ["title", "tagline"]) {
+		const value = String(form.get(key) ?? "").trim();
+		run(`INSERT INTO options (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value`, `site:${key}`, JSON.stringify(value));
+	}
+	touch();
+	audit(Astro.locals.user!.id, "settings.update", "settings", "site");
+	setFlash(Astro.cookies, "ok", "บันทึกการตั้งค่าแล้ว");
+	return Astro.redirect("/admin/settings", 303);
+}
+const s = await getSiteSettings();
+const info = get<{ id: string }>(`SELECT id FROM ec_site_info WHERE deleted_at IS NULL LIMIT 1`);
+const rp = relyingParty(Astro.url);
+---
+
+<AdminLayout title="ตั้งค่าเว็บไซต์" active="settings">
+	<form method="post" class="card card-pad" data-guard style="margin-bottom: 20px">
+		<h2>ชื่อเว็บไซต์</h2>
+		<div class="field"><label for="t">ชื่อเว็บไซต์</label><input id="t" type="text" name="title" value={(s.title as string) ?? ""} required /></div>
+		<div class="field"><label for="g">คำขวัญ / คำอธิบายสั้น</label><input id="g" type="text" name="tagline" value={(s.tagline as string) ?? ""} /><p class="help">ใช้เป็นคำอธิบายเว็บไซต์ในผลค้นหาและเวลาแชร์ลิงก์</p></div>
+		<button class="btn primary" type="submit">บันทึก</button>
+	</form>
+	<div class="card card-pad">
+		<h2>ตั้งค่าอื่น ๆ</h2>
+		<ul style="margin: 0; padding-left: 18px; line-height: 2">
+			{info && <li><a href={`/admin/c/site_info/${info.id}`}>ข้อมูลเว็บไซต์ / หน้าแรก</a> — โลโก้ แบนเนอร์ หัวข้อแต่ละส่วน ข้อมูลติดต่อ footer ป๊อปอัพต้อนรับ</li>}
+			<li><a href="/admin/menus">เมนูเว็บไซต์</a> — เมนูหลักและลิงก์ท้ายเว็บ</li>
+			<li><a href="/admin/users">ผู้ใช้และผู้ดูแล</a> — เพิ่มผู้ดูแล กำหนดสิทธิ์</li>
+		</ul>
+		<p class="muted small" style="margin: 14px 0 0">ที่อยู่เว็บสำหรับ passkey ตอนนี้: <strong>{rp.origin}</strong>{process.env.EMDASH_SITE_URL ? " (ตั้งไว้ใน .env)" : " (จากที่อยู่ที่เปิดเข้ามา)"}</p>
+	</div>
+</AdminLayout>

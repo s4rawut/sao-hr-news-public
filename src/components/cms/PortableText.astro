@@ -1,0 +1,11 @@
+---
+/** Rich text from a content field (replaces EmDash's <PortableText>). */
+import { portableTextToHtml } from "../../lib/cms/portable-text";
+
+interface Props {
+	value: unknown;
+}
+const html = portableTextToHtml(Astro.props.value);
+---
+
+<Fragment set:html={html} />

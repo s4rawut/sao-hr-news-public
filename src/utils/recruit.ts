@@ -1,5 +1,5 @@
 import { byPostDate, postDate } from "./post-date";
-import { getEmDashCollection, getEmDashReferences, getTaxonomyTermsWithCacheHint, getTermsForEntries } from "emdash";
+import { getEmDashCollection, getEmDashReferences, getTaxonomyTermsWithCacheHint, getTermsForEntries } from "../lib/cms";
 import { adminDateTime, bangkokParts, thaiMonthsShort } from "./thai-date";
 
 /**

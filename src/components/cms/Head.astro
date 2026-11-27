@@ -1,0 +1,17 @@
+---
+/** Share / SEO tags for the page (replaces EmDash's <EmDashHead>). */
+interface Props {
+	page?: { title?: string; description?: string; canonical?: string; image?: string; siteName?: string };
+}
+const p = Astro.props.page ?? {};
+const abs = (u?: string) => (u && u.startsWith("/") ? new URL(u, Astro.url.origin).href : u);
+---
+
+{p.canonical && <link rel="canonical" href={abs(p.canonical)} />}
+{p.title && <meta property="og:title" content={p.title} />}
+{p.description && <meta property="og:description" content={p.description} />}
+{p.image && <meta property="og:image" content={abs(p.image)} />}
+{p.siteName && <meta property="og:site_name" content={p.siteName} />}
+<meta property="og:type" content="website" />
+<meta property="og:url" content={abs(p.canonical) ?? Astro.url.href} />
+<meta name="twitter:card" content={p.image ? "summary_large_image" : "summary"} />

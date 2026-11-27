@@ -1,0 +1,26 @@
+---
+/** Admin pages without the sidebar (sign-in, invites). */
+import "./admin.css";
+interface Props {
+	title: string;
+}
+---
+
+<!doctype html>
+<html lang="th">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="robots" content="noindex, nofollow" />
+		<title>{Astro.props.title}</title>
+		<link href="/fonts/k2d.css" rel="stylesheet" />
+	</head>
+	<body class="adm">
+		<div class="login-wrap">
+			<div class="card login-card">
+				<span class="adm-brand-mark" style="margin: 0 auto">HR</span>
+				<slot />
+			</div>
+		</div>
+	</body>
+</html>

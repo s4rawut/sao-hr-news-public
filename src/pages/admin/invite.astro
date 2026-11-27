@@ -1,0 +1,43 @@
+---
+/** Accepting an invite: the person sets their name, gets an account, then adds a passkey. */
+import BareLayout from "../../admin/BareLayout.astro";
+import { audit, consumeToken, createSession, peekInvite, roleName } from "../../lib/admin/auth";
+import { isSecure } from "../../admin/api";
+
+const token = Astro.url.searchParams.get("token") ?? "";
+const invite = peekInvite(token);
+let error = invite && Date.parse(invite.expires_at) > Date.now() ? "" : "ลิงก์เชิญนี้หมดอายุ ใช้ไปแล้ว หรือไม่ถูกต้อง";
+if (Astro.request.method === "POST" && !error) {
+	const form = await Astro.request.formData();
+	const result = consumeToken(token, String(form.get("name") ?? ""));
+	if ("error" in result) error = result.error;
+	else {
+		createSession(Astro.cookies, result.user.id, isSecure(Astro.url));
+		audit(result.user.id, "user.invite.accept", "user", result.user.id);
+		return Astro.redirect("/admin/account?addPasskey=1", 303);
+	}
+}
+---
+
+<BareLayout title="รับคำเชิญเข้าหลังบ้าน">
+	<h1>รับคำเชิญเข้าหลังบ้าน</h1>
+	{
+		error ? (
+			<p class="login-err">{error}</p>
+		) : (
+			<>
+				<p class="muted">
+					{invite!.email} · สิทธิ์ {roleName(invite!.role)}
+				</p>
+				<form method="post" style="text-align: left; margin-top: 16px">
+					<div class="field">
+						<label for="nm">ชื่อที่แสดง</label>
+						<input id="nm" type="text" name="name" required placeholder="ชื่อ - นามสกุล" />
+					</div>
+					<button class="btn primary" type="submit">สร้างบัญชีและเข้าสู่ระบบ</button>
+				</form>
+				<p class="muted small" style="margin-top: 16px">ขั้นต่อไป: เพิ่ม passkey บนเครื่องนี้ เพื่อเข้าสู่ระบบครั้งต่อไปด้วยลายนิ้วมือ / Windows Hello</p>
+			</>
+		)
+	}
+</BareLayout>

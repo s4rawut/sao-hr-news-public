@@ -1,6 +1,6 @@
 // One-time sign-in link for an admin, for when nobody can sign in at the site's address yet
 // (e.g. first sign-in after moving to a new domain: passkeys made on the old address don't work there).
-// It does what admin → "sign-in handover" does, but from the server, so only people who can run
+// It does what admin → ผู้ใช้ → "ลิงก์เข้าระบบ" does, but from the server, so only people who can run
 // commands on the server can make a link. The link works once, expires after 15 minutes, and opens
 // Security settings ready to add a passkey.
 //
@@ -10,10 +10,10 @@
 // development account.
 import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
-import { generateTokenWithHash } from "@emdash-cms/auth";
+import { createHash, randomBytes } from "node:crypto";
 
 const EXPIRY_MS = 15 * 60 * 1000;
-const REDIRECT = "/_emdash/admin/settings/security?addPasskey=1";
+const REDIRECT = "/admin/account?addPasskey=1";
 const ADMIN_ROLE = 50;
 
 const [siteArg, emailArg] = process.argv.slice(2);
@@ -23,6 +23,11 @@ const fail = (msg) => {
 };
 
 const site = siteArg || process.env.EMDASH_SITE_URL || process.env.SITE_URL || process.env.FALLBACK_SITE_URL;
+const b64url = (buf) => Buffer.from(buf).toString("base64url");
+const generateTokenWithHash = () => {
+	const bytes = randomBytes(32);
+	return { token: b64url(bytes), hash: b64url(createHash("sha256").update(bytes).digest()) };
+};
 if (!site || !URL.canParse(site)) fail("give the site address, e.g. https://dev-hr-sao.audit.go.th (or set EMDASH_SITE_URL)");
 const origin = new URL(site);
 const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
@@ -36,7 +41,7 @@ db.exec("PRAGMA busy_timeout = 10000");
 const admins = db
 	.prepare("SELECT id, email, name FROM users WHERE role >= ? AND (disabled IS NULL OR disabled = 0) ORDER BY created_at")
 	.all(ADMIN_ROLE)
-	.filter((u) => u.email !== "dev@emdash.local");
+	.filter((u) => u.email !== "dev@emdash.local"); // leftover development account, never signs in
 let user;
 if (emailArg) {
 	user = admins.find((u) => u.email.toLowerCase() === emailArg.toLowerCase());
@@ -54,7 +59,7 @@ db.prepare(
 ).run(hash, user.id, user.email, new Date(now.getTime() + EXPIRY_MS).toISOString(), now.toISOString());
 db.close();
 
-const url = new URL("/_emdash/api/auth/magic-link/verify", origin.origin);
+const url = new URL("/admin/auth/link", origin.origin);
 url.searchParams.set("token", token);
-url.searchParams.set("redirect", REDIRECT);
+url.searchParams.set("next", REDIRECT);
 console.log(`Sign-in link for ${user.name || user.email} (${user.email}) — works once, expires in 15 minutes:\n\n${url}\n`);

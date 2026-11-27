@@ -1,0 +1,32 @@
+---
+import AdminLayout from "../../../admin/AdminLayout.astro";
+import { taxonomyDefs } from "../../../lib/admin/content";
+import { getCollectionDef } from "../../../lib/cms/schema";
+import { collectionLabel } from "../../../admin/nav";
+import { all } from "../../../lib/cms/db";
+
+if ((Astro.locals.user?.role ?? 0) < 40) return Astro.redirect("/admin", 302);
+const defs = taxonomyDefs().map((t) => ({
+	...t,
+	n: all<{ n: number }>(`SELECT count(*) n FROM taxonomies WHERE name = ?`, t.name)[0].n,
+	used: t.collections.map((c) => (getCollectionDef(c) ? collectionLabel(getCollectionDef(c)!) : c)).join(", "),
+}));
+---
+
+<AdminLayout title="หมวดหมู่" active="taxonomies" subtitle="หมวด / กลุ่ม / ประเภท ที่ติ๊กเลือกได้ในหน้าแก้ไขเนื้อหา">
+	<div class="card">
+		<table class="list">
+			<thead><tr><th>ชุดหมวดหมู่</th><th>ใช้กับ</th><th>จำนวน</th><th></th></tr></thead>
+			<tbody>
+				{defs.map((t) => (
+					<tr>
+						<td class="title-cell"><a href={`/admin/taxonomies/${t.name}`}>{t.name === "category" ? "หมวดคลังข้อมูล (ประกาศ / คำสั่ง …)" : t.name === "tag" ? "แท็ก" : t.label}</a></td>
+						<td class="small muted">{t.used}</td>
+						<td class="small">{t.n}</td>
+						<td style="text-align: right"><a class="btn sm" href={`/admin/taxonomies/${t.name}`}>แก้ไข</a></td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	</div>
+</AdminLayout>

@@ -1,0 +1,27 @@
+---
+import AdminLayout from "../../../admin/AdminLayout.astro";
+import { listMenus } from "../../../lib/admin/menus";
+import { all } from "../../../lib/cms/db";
+
+if ((Astro.locals.user?.role ?? 0) < 40) return Astro.redirect("/admin", 302);
+const menus = listMenus().map((m) => ({ ...m, n: all<{ n: number }>(`SELECT count(*) n FROM _emdash_menu_items WHERE menu_id = ?`, m.id)[0].n }));
+const NAMES: Record<string, string> = { primary: "เมนูหลัก (แถบด้านบน)", footer: "ลิงก์ท้ายเว็บ (footer)" };
+---
+
+<AdminLayout title="เมนูเว็บไซต์" active="menus">
+	<div class="card">
+		<table class="list">
+			<thead><tr><th>เมนู</th><th>จำนวนรายการ</th><th></th></tr></thead>
+			<tbody>
+				{menus.map((m) => (
+					<tr>
+						<td class="title-cell"><a href={`/admin/menus/${m.name}`}>{NAMES[m.name] ?? m.label}</a></td>
+						<td class="small">{m.n}</td>
+						<td style="text-align: right"><a class="btn sm" href={`/admin/menus/${m.name}`}>แก้ไข</a></td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	</div>
+	<p class="muted small">หน้าเว็บที่ยังไม่อยู่ในเมนูหลักจะต่อท้ายเมนูให้เอง (ยกเว้นหน้าที่ติ๊ก "ซ่อนจากเมนูหลัก") แท็บของหน้าเกี่ยวกับเราและโครงสร้างจะขึ้นเป็นเมนูย่อยให้เอง</p>
+</AdminLayout>

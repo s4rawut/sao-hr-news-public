@@ -1,0 +1,113 @@
+---
+import AdminLayout from "../../admin/AdminLayout.astro";
+import AdminIcon from "../../admin/AdminIcon.astro";
+import { all, get, run } from "../../lib/cms/db";
+import { audit, relyingParty, roleName } from "../../lib/admin/auth";
+import { setFlash, thaiDateTime } from "../../admin/flash";
+
+const user = Astro.locals.user!;
+if (Astro.request.method === "POST") {
+	const form = await Astro.request.formData();
+	const action = String(form.get("_action"));
+	if (action === "name") {
+		run(`UPDATE users SET name = ? WHERE id = ?`, String(form.get("name") ?? "").trim() || null, user.id);
+		setFlash(Astro.cookies, "ok", "บันทึกชื่อแล้ว");
+	} else if (action === "rename") {
+		run(`UPDATE credentials SET name = ? WHERE id = ? AND user_id = ?`, String(form.get("name") ?? "").trim() || "Passkey", String(form.get("id")), user.id);
+		setFlash(Astro.cookies, "ok", "เปลี่ยนชื่อ passkey แล้ว");
+	} else if (action === "delete") {
+		const n = get<{ n: number }>(`SELECT count(*) n FROM credentials WHERE user_id = ?`, user.id)!.n;
+		if (n <= 1) setFlash(Astro.cookies, "error", "ลบ passkey สุดท้ายไม่ได้ — เพิ่ม passkey อื่นก่อน");
+		else {
+			run(`DELETE FROM credentials WHERE id = ? AND user_id = ?`, String(form.get("id")), user.id);
+			audit(user.id, "auth.passkey.delete", "user", user.id);
+			setFlash(Astro.cookies, "ok", "ลบ passkey แล้ว");
+		}
+	}
+	return Astro.redirect("/admin/account", 303);
+}
+const creds = all<{ id: string; name: string | null; created_at: string; last_used_at: string }>(
+	`SELECT id, name, created_at, last_used_at FROM credentials WHERE user_id = ? ORDER BY created_at`,
+	user.id,
+);
+const me = get<{ name: string | null; email: string }>(`SELECT name, email FROM users WHERE id = ?`, user.id)!;
+const addPasskey = Astro.url.searchParams.has("addPasskey");
+const rp = relyingParty(Astro.url);
+---
+
+<AdminLayout title="บัญชีของฉัน" active="account">
+	{addPasskey && (
+		<div class="notice info">
+			เพิ่ม passkey สำหรับเครื่องนี้ เพื่อครั้งต่อไปเข้าสู่ระบบด้วยลายนิ้วมือ / Windows Hello / มือถือ ได้เอง (ไม่ต้องขอลิงก์อีก)
+		</div>
+	)}
+	<div class="card card-pad" style="margin-bottom: 20px">
+		<h2>ข้อมูลบัญชี</h2>
+		<form method="post" style="display: flex; gap: 10px; align-items: end; flex-wrap: wrap">
+			<input type="hidden" name="_action" value="name" />
+			<div class="field" style="flex: 1; min-width: 240px; margin: 0">
+				<label for="nm">ชื่อที่แสดง</label>
+				<input id="nm" type="text" name="name" value={me.name ?? ""} />
+			</div>
+			<button class="btn" type="submit">บันทึก</button>
+		</form>
+		<p class="muted small" style="margin: 12px 0 0">อีเมล: {me.email} · สิทธิ์: {roleName(user.role)}</p>
+	</div>
+
+	<div class="card card-pad">
+		<h2>Passkey ของฉัน</h2>
+		<p class="muted small" style="margin-top: -6px">passkey ผูกกับที่อยู่เว็บ <strong>{rp.rpId}</strong> — ใช้ได้เฉพาะเมื่อเปิดหลังบ้านจากที่อยู่นี้</p>
+		<div class="table-wrap">
+			<table class="list">
+				<thead><tr><th>ชื่อเครื่อง</th><th>เพิ่มเมื่อ</th><th>ใช้ล่าสุด</th><th></th></tr></thead>
+				<tbody>
+					{creds.map((c) => (
+						<tr>
+							<td>
+								<form method="post" style="display: flex; gap: 6px">
+									<input type="hidden" name="_action" value="rename" />
+									<input type="hidden" name="id" value={c.id} />
+									<input type="text" name="name" value={c.name ?? "Passkey"} style="max-width: 240px" />
+									<button class="btn sm" type="submit">เปลี่ยนชื่อ</button>
+								</form>
+							</td>
+							<td class="muted small">{thaiDateTime(c.created_at)}</td>
+							<td class="muted small">{thaiDateTime(c.last_used_at)}</td>
+							<td>
+								<form method="post">
+									<input type="hidden" name="_action" value="delete" />
+									<input type="hidden" name="id" value={c.id} />
+									<button class="btn sm danger" type="submit" data-confirm="ลบ passkey นี้?"><AdminIcon name="trash" size={14} /></button>
+								</form>
+							</td>
+						</tr>
+					))}
+					{creds.length === 0 && <tr><td colspan="4" class="muted">ยังไม่มี passkey</td></tr>}
+				</tbody>
+			</table>
+		</div>
+		<div style="display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; align-items: center">
+			<input type="text" data-pk-name placeholder="ชื่อเครื่อง เช่น MacBook สบท." style="max-width: 280px" />
+			<button class="btn primary" type="button" data-pk-add><AdminIcon name="key" size={16} /> เพิ่ม passkey สำหรับเครื่องนี้</button>
+			<span class="login-err" data-pk-err hidden></span>
+		</div>
+	</div>
+</AdminLayout>
+
+<script>
+	import { registerPasskey } from "../../admin/webauthn-client";
+	const btn = document.querySelector<HTMLButtonElement>("[data-pk-add]")!;
+	const err = document.querySelector<HTMLElement>("[data-pk-err]")!;
+	btn.addEventListener("click", async () => {
+		btn.disabled = true;
+		err.hidden = true;
+		try {
+			await registerPasskey(document.querySelector<HTMLInputElement>("[data-pk-name]")!.value || navigator.platform || "Passkey");
+			location.href = "/admin/account";
+		} catch (e) {
+			err.textContent = (e as Error).name === "InvalidStateError" ? "เครื่องนี้มี passkey ของบัญชีนี้อยู่แล้ว" : (e as Error).name === "NotAllowedError" ? "ยกเลิกแล้ว" : (e as Error).message;
+			err.hidden = false;
+			btn.disabled = false;
+		}
+	});
+</script>

@@ -1,0 +1,82 @@
+---
+import AdminLayout from "../../../admin/AdminLayout.astro";
+import AdminIcon from "../../../admin/AdminIcon.astro";
+import { listMedia } from "../../../lib/admin/media";
+import { mediaFileUrl } from "../../../lib/cms/media";
+
+const q = Astro.url.searchParams.get("q") ?? "";
+const kind = Astro.url.searchParams.get("kind") ?? "";
+const page = Number(Astro.url.searchParams.get("page") ?? 1);
+const list = listMedia({ q, kind, page, perPage: 60 });
+const size = (n: number | null) => (!n ? "" : n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
+const qs = (p: number) => `?${new URLSearchParams({ ...(q && { q }), ...(kind && { kind }), page: String(p) })}`;
+---
+
+<AdminLayout title="คลังไฟล์และรูปภาพ" active="media" subtitle={`${list.total} ไฟล์`}>
+	<label class="dropzone" data-drop>
+		<span><strong>ลากไฟล์มาวางที่นี่</strong> หรือคลิกเพื่ออัปโหลด (รูป PDF Word วิดีโอ … ไม่เกิน 200 MB)<br /><span data-status></span></span>
+		<input type="file" multiple hidden data-file />
+	</label>
+	<div class="toolbar">
+		<form method="get">
+			<input type="search" name="q" value={q} placeholder="ค้นหาชื่อไฟล์…" />
+			<select name="kind" onchange="this.form.submit()">
+				<option value="">ทุกชนิด</option>
+				<option value="image" selected={kind === "image"}>รูปภาพ</option>
+				<option value="video" selected={kind === "video"}>วิดีโอ</option>
+				<option value="document" selected={kind === "document"}>เอกสาร</option>
+			</select>
+			<button class="btn" type="submit"><AdminIcon name="search" size={15} /> ค้นหา</button>
+		</form>
+	</div>
+	<div class="media-grid">
+		{list.rows.map((m) => (
+			<a class="media-card" href={`/admin/media/${m.id}`} title={m.filename}>
+				<span class="media-thumb">
+					{m.mime_type.startsWith("image/") ? <img src={mediaFileUrl(m.storage_key)} alt="" loading="lazy" /> : <span>{m.filename.split(".").pop()?.toUpperCase()}</span>}
+				</span>
+				<span class="name">{m.filename}</span>
+				<span class="muted small">{size(m.size)}{m.width ? ` · ${m.width}×${m.height}` : ""}</span>
+			</a>
+		))}
+	</div>
+	{list.rows.length === 0 && <div class="card empty-state">ไม่พบไฟล์</div>}
+	{list.pages > 1 && (
+		<nav class="pager">
+			<a class="btn sm" href={qs(Math.max(1, list.page - 1))}>ก่อนหน้า</a>
+			<span>หน้า {list.page} / {list.pages}</span>
+			<a class="btn sm" href={qs(Math.min(list.pages, list.page + 1))}>ถัดไป</a>
+		</nav>
+	)}
+</AdminLayout>
+
+<script>
+	const drop = document.querySelector<HTMLElement>("[data-drop]")!;
+	const input = document.querySelector<HTMLInputElement>("[data-file]")!;
+	const status = document.querySelector<HTMLElement>("[data-status]")!;
+	const upload = async (files: FileList | File[]) => {
+		const list = [...files];
+		if (!list.length) return;
+		status.textContent = `กำลังอัปโหลด ${list.length} ไฟล์…`;
+		const fd = new FormData();
+		for (const f of list) fd.append("files", f);
+		const res = await fetch("/admin/api/media", { method: "POST", body: fd });
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			status.textContent = data.error || "อัปโหลดไม่สำเร็จ";
+			return;
+		}
+		location.reload();
+	};
+	input.addEventListener("change", () => upload(input.files ?? []));
+	drop.addEventListener("dragover", (e) => {
+		e.preventDefault();
+		drop.classList.add("over");
+	});
+	drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+	drop.addEventListener("drop", (e) => {
+		e.preventDefault();
+		drop.classList.remove("over");
+		upload(e.dataTransfer?.files ?? []);
+	});
+</script>

@@ -1,0 +1,135 @@
+---
+/** Frame of every admin page: sidebar (collections, media, menus …), top bar, flash message. */
+import "./admin.css";
+import AdminIcon from "./AdminIcon.astro";
+import { navGroups } from "./nav";
+import { getSiteSettings } from "../lib/cms";
+import { roleName } from "../lib/admin/auth";
+
+interface Props {
+	title: string;
+	active?: string;
+	/** shown under the title */
+	subtitle?: string;
+	wide?: boolean;
+}
+const { title, active = "", subtitle, wide } = Astro.props;
+const user = Astro.locals.user;
+const settings = await getSiteSettings();
+const siteTitle = (settings.title as string) || "เว็บไซต์";
+const groups = navGroups();
+const flash = Astro.cookies.get("hr_flash")?.value;
+if (flash) Astro.cookies.delete("hr_flash", { path: "/admin" });
+let flashMsg: { kind: string; text: string } | undefined;
+try {
+	flashMsg = flash ? JSON.parse(decodeURIComponent(flash)) : undefined;
+} catch {
+	flashMsg = undefined;
+}
+const isAdmin = (user?.role ?? 0) >= 50;
+const canManage = (user?.role ?? 0) >= 40;
+const link = (href: string, key: string, label: string, icon: string) => ({ href, key, label, icon });
+const top = [link("/admin", "dashboard", "แดชบอร์ด", "home")];
+const manage = [
+	link("/admin/media", "media", "คลังไฟล์และรูปภาพ", "image"),
+	...(canManage
+		? [link("/admin/menus", "menus", "เมนูเว็บไซต์", "menu"), link("/admin/taxonomies", "taxonomies", "หมวดหมู่", "tag")]
+		: []),
+	...(isAdmin ? [link("/admin/users", "users", "ผู้ใช้และผู้ดูแล", "users"), link("/admin/settings", "settings", "ตั้งค่าเว็บไซต์", "settings")] : []),
+];
+---
+
+<!doctype html>
+<html lang="th">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="robots" content="noindex, nofollow" />
+		<title>{title} — หลังบ้าน {siteTitle}</title>
+		<link href="/fonts/k2d.css" rel="stylesheet" />
+	</head>
+	<body class="adm">
+		<aside class="adm-side" data-side>
+			<a class="adm-brand" href="/admin">
+				<span class="adm-brand-mark">HR</span>
+				<span>
+					<strong>หลังบ้าน</strong>
+					<small>{siteTitle}</small>
+				</span>
+			</a>
+			<nav class="adm-nav" aria-label="เมนูหลังบ้าน">
+				{top.map((l) => (
+					<a href={l.href} class:list={{ active: active === l.key }}>
+						<AdminIcon name={l.icon} /> {l.label}
+					</a>
+				))}
+				{groups.map((g) => (
+					<details open={g.items.some((i) => active === `c:${i.slug}`) || groups.indexOf(g) === 0}>
+						<summary>{g.label}</summary>
+						{g.items.map((i) => (
+							<a href={`/admin/c/${i.slug}`} class:list={{ active: active === `c:${i.slug}` }}>
+								<AdminIcon name="file" size={16} /> {i.label}
+							</a>
+						))}
+					</details>
+				))}
+				<div class="adm-nav-sep">จัดการ</div>
+				{manage.map((l) => (
+					<a href={l.href} class:list={{ active: active === l.key }}>
+						<AdminIcon name={l.icon} /> {l.label}
+					</a>
+				))}
+			</nav>
+			<div class="adm-side-foot">
+				<a href="/" target="_blank" rel="noopener"><AdminIcon name="external" size={16} /> ดูหน้าเว็บ</a>
+			</div>
+		</aside>
+
+		<div class="adm-main">
+			<header class="adm-top">
+				<button type="button" class="adm-burger" data-burger aria-label="เปิดเมนู"><AdminIcon name="menu" /></button>
+				<div class="adm-top-title">
+					<h1>{title}</h1>
+					{subtitle && <p>{subtitle}</p>}
+				</div>
+				<div class="adm-top-actions"><slot name="actions" /></div>
+				{user && (
+					<details class="adm-user">
+						<summary>
+							<span class="adm-avatar">{(user.name || user.email).slice(0, 1).toUpperCase()}</span>
+							<span class="adm-user-name">{user.name || user.email}<small>{roleName(user.role)}</small></span>
+						</summary>
+						<div class="adm-user-menu">
+							<a href="/admin/account"><AdminIcon name="key" size={16} /> บัญชีและ passkey</a>
+							<form method="post" action="/admin/logout"><button type="submit"><AdminIcon name="logout" size={16} /> ออกจากระบบ</button></form>
+						</div>
+					</details>
+				)}
+			</header>
+			{flashMsg && <div class:list={["adm-flash", flashMsg.kind]} role="status" data-flash>{flashMsg.text}</div>}
+			<main class:list={["adm-content", { wide }]}>
+				<slot />
+			</main>
+		</div>
+		<script>
+			document.querySelector("[data-burger]")?.addEventListener("click", () => document.body.classList.toggle("side-open"));
+			const flash = document.querySelector<HTMLElement>("[data-flash]");
+			if (flash) setTimeout(() => flash.classList.add("hide"), 5000);
+			// leaving a form with unsaved changes asks first
+			document.querySelectorAll<HTMLFormElement>("form[data-guard]").forEach((form) => {
+				let dirty = false;
+				form.addEventListener("input", () => (dirty = true));
+				form.addEventListener("change", () => (dirty = true));
+				form.addEventListener("submit", () => (dirty = false));
+				window.addEventListener("beforeunload", (e) => {
+					if (dirty) e.preventDefault();
+				});
+			});
+			document.querySelectorAll<HTMLElement>("[data-confirm]").forEach((el) =>
+				el.addEventListener("click", (e) => {
+					if (!confirm(el.dataset.confirm!)) e.preventDefault();
+				}),
+			);
+		</script>
+	</body>
+</html>

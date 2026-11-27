@@ -1,0 +1,91 @@
+---
+import AdminLayout from "../../../admin/AdminLayout.astro";
+import AdminIcon from "../../../admin/AdminIcon.astro";
+import { deleteMedia, getMedia, mediaUsage, updateMedia } from "../../../lib/admin/media";
+import { mediaFileUrl } from "../../../lib/cms/media";
+import { audit } from "../../../lib/admin/auth";
+import { setFlash, thaiDateTime } from "../../../admin/flash";
+
+const m = getMedia(Astro.params.id ?? "");
+if (!m) return new Response("ไม่พบไฟล์", { status: 404 });
+const user = Astro.locals.user!;
+const usage = mediaUsage(m);
+if (Astro.request.method === "POST") {
+	const form = await Astro.request.formData();
+	if (form.get("_action") === "delete") {
+		if (usage.length && form.get("force") !== "1") setFlash(Astro.cookies, "error", "ไฟล์นี้ยังถูกใช้อยู่");
+		else {
+			deleteMedia(m.id);
+			audit(user.id, "media.delete", "media", m.id, { filename: m.filename });
+			setFlash(Astro.cookies, "ok", "ลบไฟล์แล้ว");
+			return Astro.redirect("/admin/media", 303);
+		}
+	} else {
+		updateMedia(m.id, String(form.get("alt") ?? ""), String(form.get("caption") ?? ""));
+		setFlash(Astro.cookies, "ok", "บันทึกแล้ว");
+	}
+	return Astro.redirect(`/admin/media/${m.id}`, 303);
+}
+const url = mediaFileUrl(m.storage_key);
+const full = new URL(url, Astro.url.origin).href;
+---
+
+<AdminLayout title={m.filename} active="media" subtitle="ไฟล์ในคลัง">
+	<a slot="actions" class="btn" href="/admin/media">← กลับ</a>
+	<div class="edit-grid">
+		<div class="card card-pad" style="text-align: center">
+			{m.mime_type.startsWith("image/") ? (
+				<img src={url} alt="" style="max-width: 100%; max-height: 70vh; border-radius: 8px" />
+			) : m.mime_type.startsWith("video/") ? (
+				<video src={url} controls style="max-width: 100%; max-height: 70vh" />
+			) : m.mime_type === "application/pdf" ? (
+				<iframe src={url} style="width: 100%; height: 70vh; border: 0" title={m.filename} />
+			) : (
+				<p class="muted">ไม่มีตัวอย่างสำหรับไฟล์ชนิดนี้ — <a href={url}>ดาวน์โหลด</a></p>
+			)}
+		</div>
+		<aside class="edit-side">
+			<div class="card card-pad">
+				<h3>รายละเอียด</h3>
+				<p class="small muted" style="margin: 0 0 10px; word-break: break-all">
+					{m.mime_type} · {m.size ? `${(m.size / 1024).toFixed(0)} KB` : ""}{m.width ? ` · ${m.width}×${m.height}` : ""}<br />อัปโหลด {thaiDateTime(m.created_at)}
+				</p>
+				<div class="field">
+					<label class="small">ลิงก์ไฟล์</label>
+					<div style="display: flex; gap: 6px"><input type="text" readonly value={full} data-link /><button class="btn sm" type="button" data-copy><AdminIcon name="copy" size={14} /></button></div>
+				</div>
+				<form method="post">
+					<div class="field"><label for="alt" class="small">คำอธิบายรูป (alt)</label><input id="alt" type="text" name="alt" value={m.alt ?? ""} /></div>
+					<div class="field"><label for="cap" class="small">คำบรรยาย</label><input id="cap" type="text" name="caption" value={m.caption ?? ""} /></div>
+					<button class="btn primary" type="submit">บันทึก</button>
+				</form>
+				<p class="muted small" style="margin: 10px 0 0">alt ที่นี่ใช้เป็นค่าเริ่มต้นเมื่อเลือกรูปนี้ครั้งต่อไป (รูปที่ใส่ไว้แล้วแก้ alt ได้ในหน้าแก้ไขเนื้อหา)</p>
+			</div>
+			<div class="card card-pad">
+				<h3>ใช้อยู่ที่</h3>
+				{usage.length ? (
+					<ul class="small" style="margin: 0; padding-left: 18px">
+						{usage.map((u) => <li>{u.collection === "settings" ? <a href="/admin/settings">{u.title}</a> : <a href={`/admin/c/${u.collection}/${u.id}`}>{u.title}</a>}</li>)}
+					</ul>
+				) : (
+					<p class="muted small" style="margin: 0">ไม่พบการใช้งาน</p>
+				)}
+			</div>
+			<form method="post">
+				<input type="hidden" name="_action" value="delete" />
+				{usage.length > 0 && <input type="hidden" name="force" value="1" />}
+				<button class="btn danger" type="submit" style="width: 100%" data-confirm={usage.length ? "ไฟล์นี้ยังถูกใช้อยู่ในเนื้อหา ถ้าลบ ลิงก์/รูปในหน้านั้นจะเสีย ลบจริงหรือไม่?" : "ลบไฟล์นี้?"}>
+					<AdminIcon name="trash" size={15} /> ลบไฟล์
+				</button>
+			</form>
+		</aside>
+	</div>
+</AdminLayout>
+
+<script>
+	document.querySelector("[data-copy]")?.addEventListener("click", () => {
+		const i = document.querySelector<HTMLInputElement>("[data-link]")!;
+		i.select();
+		navigator.clipboard?.writeText(i.value);
+	});
+</script>

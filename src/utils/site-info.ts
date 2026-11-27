@@ -1,4 +1,4 @@
-import { getEmDashCollection } from "emdash";
+import { getEmDashCollection } from "../lib/cms";
 
 /**
  * Homepage/footer settings, edited in admin under "ข้อมูลเว็บไซต์ / หน้าแรก".

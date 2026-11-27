@@ -1,0 +1,139 @@
+---
+import AdminLayout from "../../../../admin/AdminLayout.astro";
+import AdminIcon from "../../../../admin/AdminIcon.astro";
+import { collectionLabel, SINGLETONS } from "../../../../admin/nav";
+import { getCollectionDef } from "../../../../lib/cms/schema";
+import { duplicateEntry, listEntries, purgeEntry, restoreEntry, trashEntry } from "../../../../lib/admin/content";
+import { audit } from "../../../../lib/admin/auth";
+import { setFlash, thaiDateTime } from "../../../../admin/flash";
+
+const def = getCollectionDef(Astro.params.collection ?? "");
+if (!def) return new Response("ไม่พบหมวดนี้", { status: 404 });
+const user = Astro.locals.user!;
+const base = `/admin/c/${def.slug}`;
+
+if (Astro.request.method === "POST") {
+	const form = await Astro.request.formData();
+	const id = String(form.get("id") ?? "");
+	const action = String(form.get("_action"));
+	try {
+		if (action === "trash") {
+			trashEntry(def, id);
+			setFlash(Astro.cookies, "ok", "ย้ายไปถังขยะแล้ว (กู้คืนได้)");
+		} else if (action === "restore") {
+			restoreEntry(def, id);
+			setFlash(Astro.cookies, "ok", "กู้คืนแล้ว");
+		} else if (action === "purge") {
+			if (user.role < 40) throw new Error("ไม่มีสิทธิ์ลบถาวร");
+			purgeEntry(def, id);
+			setFlash(Astro.cookies, "ok", "ลบถาวรแล้ว");
+		} else if (action === "duplicate") {
+			const newId = duplicateEntry(def, id, user.id);
+			audit(user.id, "content.duplicate", def.slug, newId);
+			setFlash(Astro.cookies, "ok", "ทำสำเนาแล้ว (เป็นฉบับร่าง)");
+			return Astro.redirect(`${base}/${newId}`, 303);
+		}
+		audit(user.id, `content.${action}`, def.slug, id);
+	} catch (e) {
+		setFlash(Astro.cookies, "error", (e as Error).message);
+	}
+	return Astro.redirect(`${base}${Astro.url.search}`, 303);
+}
+
+const q = Astro.url.searchParams.get("q") ?? "";
+const status = Astro.url.searchParams.get("status") ?? "";
+const trash = Astro.url.searchParams.get("view") === "trash";
+const sort = Astro.url.searchParams.get("sort") ?? (def.fields.some((f) => f.slug === "sort_order") ? "order" : "");
+const page = Number(Astro.url.searchParams.get("page") ?? 1);
+const list = listEntries(def, { q, status, trash, page, sort });
+if (SINGLETONS.has(def.slug) && !trash && list.total === 1 && !q) return Astro.redirect(`${base}/${list.rows[0].id}`, 302);
+const label = collectionLabel(def);
+const hasSort = def.fields.some((f) => f.slug === "sort_order");
+const qs = (o: Record<string, string | number>) => {
+	const p = new URLSearchParams({ ...(q && { q }), ...(status && { status }), ...(trash && { view: "trash" }), ...(sort && { sort }), ...Object.fromEntries(Object.entries(o).map(([k, v]) => [k, String(v)])) });
+	return `?${p}`;
+};
+---
+
+<AdminLayout title={label} active={`c:${def.slug}`} subtitle={def.description ?? undefined}>
+	<a slot="actions" class="btn primary" href={`${base}/new`}><AdminIcon name="plus" size={16} /> เพิ่มใหม่</a>
+
+	<nav class="tabs-line">
+		<a href={base} class:list={{ active: !trash }}>ทั้งหมด</a>
+		<a href={`${base}?view=trash`} class:list={{ active: trash }}><AdminIcon name="trash" size={14} /> ถังขยะ</a>
+	</nav>
+
+	<div class="toolbar">
+		<form method="get">
+			{trash && <input type="hidden" name="view" value="trash" />}
+			<input type="search" name="q" value={q} placeholder="ค้นหาชื่อ…" />
+			{!trash && (
+				<select name="status" onchange="this.form.submit()">
+					<option value="">ทุกสถานะ</option>
+					<option value="published" selected={status === "published"}>เผยแพร่</option>
+					<option value="draft" selected={status === "draft"}>ฉบับร่าง</option>
+				</select>
+			)}
+			<select name="sort" onchange="this.form.submit()">
+				<option value="" selected={sort === ""}>แก้ไขล่าสุดก่อน</option>
+				<option value="title" selected={sort === "title"}>เรียงตามชื่อ</option>
+				{hasSort && <option value="order" selected={sort === "order"}>เรียงตามลำดับที่ตั้งไว้</option>}
+			</select>
+			<button class="btn" type="submit"><AdminIcon name="search" size={15} /> ค้นหา</button>
+		</form>
+		<span class="muted small" style="margin-left: auto">{list.total} รายการ</span>
+	</div>
+
+	<div class="card">
+		{list.rows.length === 0 ? (
+			<div class="empty-state">{trash ? "ถังขยะว่าง" : "ยังไม่มีรายการ"}</div>
+		) : (
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr><th>ชื่อ</th><th>สถานะ</th><th>เผยแพร่เมื่อ</th><th>แก้ไขเมื่อ</th><th></th></tr>
+					</thead>
+					<tbody>
+						{list.rows.map((r) => (
+							<tr>
+								<td class="title-cell">
+									<a href={`${base}/${r.id}`}>{String(r._title || "(ไม่มีชื่อ)")}</a>
+									{r.slug && <div class="muted small">{String(r.slug)}</div>}
+								</td>
+								<td>
+									<span class:list={["badge", r.status === "published" ? "published" : "draft"]}>{r.status === "published" ? "เผยแพร่" : "ฉบับร่าง"}</span>
+									{r.draft_revision_id ? <span class="badge warn" title="มีการแก้ไขที่ยังไม่เผยแพร่ (จาก EmDash)">มีร่างค้าง</span> : null}
+								</td>
+								<td class="muted small">{thaiDateTime(r.published_at)}</td>
+								<td class="muted small">{thaiDateTime(r.updated_at)}</td>
+								<td style="white-space: nowrap; text-align: right">
+									{trash ? (
+										<>
+											<form method="post" style="display: inline"><input type="hidden" name="_action" value="restore" /><input type="hidden" name="id" value={String(r.id)} /><button class="btn sm" type="submit"><AdminIcon name="restore" size={14} /> กู้คืน</button></form>
+											{user.role >= 40 && (
+												<form method="post" style="display: inline"><input type="hidden" name="_action" value="purge" /><input type="hidden" name="id" value={String(r.id)} /><button class="btn sm danger" type="submit" data-confirm="ลบถาวร? กู้คืนไม่ได้อีก">ลบถาวร</button></form>
+											)}
+										</>
+									) : (
+										<>
+											<a class="btn sm" href={`${base}/${r.id}`}><AdminIcon name="edit" size={14} /> แก้ไข</a>
+											<form method="post" style="display: inline"><input type="hidden" name="_action" value="duplicate" /><input type="hidden" name="id" value={String(r.id)} /><button class="btn sm ghost" type="submit" title="ทำสำเนา"><AdminIcon name="copy" size={14} /></button></form>
+											<form method="post" style="display: inline"><input type="hidden" name="_action" value="trash" /><input type="hidden" name="id" value={String(r.id)} /><button class="btn sm ghost" type="submit" title="ย้ายไปถังขยะ" data-confirm="ย้ายรายการนี้ไปถังขยะ?"><AdminIcon name="trash" size={14} /></button></form>
+										</>
+									)}
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		)}
+	</div>
+	{list.pages > 1 && (
+		<nav class="pager">
+			<a class="btn sm" href={qs({ page: Math.max(1, list.page - 1) })} aria-disabled={list.page <= 1}>ก่อนหน้า</a>
+			<span>หน้า {list.page} / {list.pages}</span>
+			<a class="btn sm" href={qs({ page: Math.min(list.pages, list.page + 1) })}>ถัดไป</a>
+		</nav>
+	)}
+</AdminLayout>

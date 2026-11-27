@@ -1,0 +1,110 @@
+---
+import AdminLayout from "../../../admin/AdminLayout.astro";
+import AdminIcon from "../../../admin/AdminIcon.astro";
+import { slugify, taxonomyDefs } from "../../../lib/admin/content";
+import { getTaxonomyTerms } from "../../../lib/cms/taxonomy";
+import { all, get, nowIso, run, touch, tx, ulid } from "../../../lib/cms/db";
+import { audit } from "../../../lib/admin/auth";
+import { setFlash } from "../../../admin/flash";
+
+if ((Astro.locals.user?.role ?? 0) < 40) return Astro.redirect("/admin", 302);
+const def = taxonomyDefs().find((t) => t.name === Astro.params.name);
+if (!def) return new Response("ไม่พบหมวดหมู่", { status: 404 });
+
+if (Astro.request.method === "POST") {
+	const form = await Astro.request.formData();
+	const action = String(form.get("_action"));
+	try {
+		if (action === "add") {
+			const label = String(form.get("label") ?? "").trim();
+			if (!label) throw new Error("กรุณาใส่ชื่อ");
+			let slug = slugify(String(form.get("slug") || label));
+			for (let i = 2; get(`SELECT 1 FROM taxonomies WHERE name = ? AND slug = ?`, def.name, slug); i++) slug = `${slugify(String(form.get("slug") || label))}-${i}`;
+			const id = ulid();
+			const parent = String(form.get("parent") ?? "") || null;
+			const order = get<{ m: number | null }>(`SELECT max(sort_order) m FROM taxonomies WHERE name = ?`, def.name)!.m ?? -1;
+			run(`INSERT INTO taxonomies (id, name, slug, label, parent_id, data, locale, translation_group, sort_order) VALUES (?, ?, ?, ?, ?, NULL, 'en', ?, ?)`, id, def.name, slug, label, parent, id, order + 1);
+			setFlash(Astro.cookies, "ok", `เพิ่ม "${label}" แล้ว`);
+		} else if (action === "save") {
+			tx(() => {
+				for (const id of form.getAll("id").map(String)) {
+					const label = String(form.get(`label:${id}`) ?? "").trim();
+					if (!label) throw new Error("ชื่อห้ามว่าง");
+					const slug = String(form.get(`slug:${id}`) ?? "").trim();
+					const clash = get(`SELECT 1 FROM taxonomies WHERE name = ? AND slug = ? AND id <> ?`, def.name, slug, id);
+					if (!slug || clash) throw new Error(`slug "${slug}" ซ้ำหรือว่าง`);
+					const parent = String(form.get(`parent:${id}`) ?? "") || null;
+					run(`UPDATE taxonomies SET label = ?, slug = ?, sort_order = ?, parent_id = ? WHERE id = ? AND name = ?`, label, slug, Number(form.get(`order:${id}`) ?? 0), parent === id ? null : parent, id, def.name);
+				}
+			});
+			setFlash(Astro.cookies, "ok", "บันทึกแล้ว");
+		} else if (action === "delete") {
+			const id = String(form.get("del_id"));
+			tx(() => {
+				run(`UPDATE taxonomies SET parent_id = NULL WHERE parent_id = ?`, id);
+				run(`DELETE FROM content_taxonomies WHERE taxonomy_id = ?`, id);
+				run(`DELETE FROM taxonomies WHERE id = ? AND name = ?`, id, def.name);
+			});
+			setFlash(Astro.cookies, "ok", "ลบแล้ว");
+		}
+		touch();
+		audit(Astro.locals.user!.id, `taxonomy.${action}`, "taxonomy", def.name);
+	} catch (e) {
+		setFlash(Astro.cookies, "error", (e as Error).message);
+	}
+	return Astro.redirect(`/admin/taxonomies/${def.name}`, 303);
+}
+
+const terms = getTaxonomyTerms(def.name);
+const flat = (ts: typeof terms, depth = 0): { t: (typeof terms)[number]; depth: number }[] => ts.flatMap((t) => [{ t, depth }, ...flat(t.children, depth + 1)]);
+const rows = flat(terms);
+const counts = new Map(all<{ id: string; n: number }>(`SELECT taxonomy_id id, count(*) n FROM content_taxonomies WHERE deleted_at IS NULL GROUP BY taxonomy_id`).map((r) => [r.id, r.n]));
+const parents = rows.filter((r) => r.depth === 0).map((r) => r.t);
+---
+
+<AdminLayout title={def.label} active="taxonomies" subtitle="ลำดับ: เลขน้อยขึ้นก่อน">
+	<a slot="actions" class="btn" href="/admin/taxonomies">← หมวดหมู่ทั้งหมด</a>
+	<div class="card card-pad" style="margin-bottom: 20px">
+		<h2>เพิ่มรายการ</h2>
+		<form method="post" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end">
+			<input type="hidden" name="_action" value="add" />
+			<div class="field" style="margin: 0"><label>ชื่อ</label><input type="text" name="label" required /></div>
+			<div class="field" style="margin: 0"><label>slug (เว้นว่างได้)</label><input type="text" name="slug" /></div>
+			<div class="field" style="margin: 0">
+				<label>อยู่ใต้</label>
+				<select name="parent" disabled={!def.hierarchical}><option value="">— ระดับบนสุด —</option>{parents.map((p) => <option value={p.translationGroup ?? p.id}>{p.label}</option>)}</select>
+			</div>
+			<button class="btn primary" type="submit"><AdminIcon name="plus" size={15} /> เพิ่ม</button>
+		</form>
+	</div>
+	<form method="post" class="card" data-guard>
+		<input type="hidden" name="_action" value="save" />
+		<table class="list">
+			<thead><tr><th>ชื่อ</th><th>slug</th>{def.hierarchical && <th>อยู่ใต้</th>}<th>ลำดับ</th><th>ใช้อยู่</th><th></th></tr></thead>
+			<tbody>
+				{rows.map(({ t, depth }) => (
+					<tr>
+						<td style={depth ? `padding-left: ${14 + depth * 24}px` : undefined}>
+							<input type="hidden" name="id" value={t.id} />
+							<input type="text" name={`label:${t.id}`} value={t.label} />
+						</td>
+						<td><input type="text" name={`slug:${t.id}`} value={t.slug} /></td>
+						{def.hierarchical && (
+							<td>
+								<select name={`parent:${t.id}`}>
+									<option value="">— บนสุด —</option>
+									{parents.filter((p) => p.id !== t.id).map((p) => <option value={p.translationGroup ?? p.id} selected={t.parentId === (p.translationGroup ?? p.id)}>{p.label}</option>)}
+								</select>
+							</td>
+						)}
+						<td><input type="number" name={`order:${t.id}`} value={t.sortOrder} style="width: 80px" /></td>
+						<td class="small muted">{counts.get(t.id) ?? 0}</td>
+						<td><button class="btn sm danger" type="submit" form="del-form" name="del_id" value={t.id} data-confirm={`ลบ "${t.label}"? รายการที่ติ๊กหมวดนี้ไว้จะไม่มีหมวดนี้อีก`}><AdminIcon name="trash" size={14} /></button></td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+		<div style="padding: 14px; text-align: right"><button class="btn primary" type="submit">บันทึกทั้งหมด</button></div>
+	</form>
+	<form method="post" id="del-form"><input type="hidden" name="_action" value="delete" /></form>
+</AdminLayout>

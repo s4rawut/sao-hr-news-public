@@ -1,0 +1,132 @@
+---
+import AdminLayout from "../../../admin/AdminLayout.astro";
+import AdminIcon from "../../../admin/AdminIcon.astro";
+import { listMenus, loadMenuItems, saveMenuItems } from "../../../lib/admin/menus";
+import { all } from "../../../lib/cms/db";
+import { audit } from "../../../lib/admin/auth";
+import { setFlash } from "../../../admin/flash";
+
+if ((Astro.locals.user?.role ?? 0) < 40) return Astro.redirect("/admin", 302);
+const menu = listMenus().find((m) => m.name === Astro.params.name);
+if (!menu) return new Response("ไม่พบเมนู", { status: 404 });
+if (Astro.request.method === "POST") {
+	const form = await Astro.request.formData();
+	try {
+		saveMenuItems(menu.id, JSON.parse(String(form.get("items") ?? "[]")));
+		audit(Astro.locals.user!.id, "menu.update", "menu", menu.name);
+		setFlash(Astro.cookies, "ok", "บันทึกเมนูแล้ว");
+	} catch (e) {
+		setFlash(Astro.cookies, "error", (e as Error).message);
+	}
+	return Astro.redirect(`/admin/menus/${menu.name}`, 303);
+}
+const items = loadMenuItems(menu.id);
+const pages = all<{ id: string; title: string; slug: string }>(`SELECT id, title, slug FROM ec_pages WHERE deleted_at IS NULL ORDER BY title`);
+const NAMES: Record<string, string> = { primary: "เมนูหลัก (แถบด้านบน)", footer: "ลิงก์ท้ายเว็บ (footer)" };
+---
+
+<AdminLayout title={NAMES[menu.name] ?? menu.label} active="menus" subtitle="จัดลำดับด้วยปุ่ม ↑ ↓ — ปุ่ม → ย้ายเข้าเป็นเมนูย่อยของรายการด้านบน">
+	<a slot="actions" class="btn" href="/admin/menus">← เมนูทั้งหมด</a>
+	<form method="post" data-guard data-menu-form>
+		<input type="hidden" name="items" value={JSON.stringify(items)} data-items />
+		<div class="card card-pad">
+			<div data-tree class="rep-list"></div>
+			<div style="display: flex; gap: 8px; margin-top: 14px">
+				<button type="button" class="btn" data-add><AdminIcon name="plus" size={15} /> เพิ่มรายการ</button>
+				<button type="submit" class="btn primary" style="margin-left: auto"><AdminIcon name="check" size={15} /> บันทึกเมนู</button>
+			</div>
+		</div>
+	</form>
+	<script type="application/json" data-pages set:html={JSON.stringify(pages)} />
+</AdminLayout>
+
+<script>
+	type Item = { id?: string; label: string; type: "custom" | "page"; url?: string; pageId?: string; newTab?: boolean; children?: Item[] };
+	const input = document.querySelector<HTMLInputElement>("[data-items]")!;
+	const tree = document.querySelector<HTMLElement>("[data-tree]")!;
+	const pages = JSON.parse(document.querySelector("[data-pages]")!.textContent || "[]") as { id: string; title: string }[];
+	let items = JSON.parse(input.value) as Item[];
+	const save = () => {
+		input.value = JSON.stringify(items);
+		input.dispatchEvent(new Event("change", { bubbles: true }));
+	};
+	const el = (html: string) => {
+		const t = document.createElement("template");
+		t.innerHTML = html.trim();
+		return t.content.firstElementChild as HTMLElement;
+	};
+	const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+	function row(item: Item, list: Item[], i: number, depth: number): HTMLElement {
+		const box = el(`<div class="rep-item" style="margin-left:${depth * 32}px">
+			<div class="rep-head"><span>${depth ? "เมนูย่อย" : "เมนู"}</span></div>
+			<div class="rep-fields">
+				<div class="field"><label class="field-label">ชื่อที่แสดง</label><input type="text" data-k="label" value="${esc(item.label ?? "")}"></div>
+				<div class="field"><label class="field-label">ลิงก์ไปที่</label><select data-k="type"><option value="custom">ที่อยู่ลิงก์ (URL)</option><option value="page">หน้าเว็บ</option></select></div>
+				<div class="field" data-url><label class="field-label">URL</label><input type="text" data-k="url" value="${esc(item.url ?? "")}" placeholder="/recruitments หรือ https://…"></div>
+				<div class="field" data-page><label class="field-label">หน้าเว็บ</label><select data-k="pageId">${pages.map((p) => `<option value="${p.id}">${esc(p.title)}</option>`).join("")}</select></div>
+				<div class="field"><label class="check" style="margin-top:28px"><input type="checkbox" data-k="newTab"> เปิดแท็บใหม่</label></div>
+			</div></div>`);
+		const head = box.querySelector(".rep-head")!;
+		const btn = (label: string, title: string, fn: () => void, disabled = false, cls = "ghost") => {
+			const b = el(`<button type="button" class="btn sm ${cls}" title="${title}">${label}</button>`) as HTMLButtonElement;
+			b.disabled = disabled;
+			b.onclick = () => {
+				fn();
+				save();
+				render();
+			};
+			head.append(b);
+		};
+		btn("↑", "เลื่อนขึ้น", () => ([list[i - 1], list[i]] = [list[i], list[i - 1]]), i === 0);
+		btn("↓", "เลื่อนลง", () => ([list[i + 1], list[i]] = [list[i], list[i + 1]]), i === list.length - 1);
+		if (depth === 0) btn("→", "ย้ายเป็นเมนูย่อยของรายการด้านบน", () => {
+			const [it] = list.splice(i, 1);
+			(list[i - 1].children ??= []).push(it, ...(it.children ?? []));
+			it.children = [];
+		}, i === 0);
+		else btn("←", "ย้ายออกเป็นเมนูหลัก", () => {
+			const [it] = list.splice(i, 1);
+			const parentIndex = items.findIndex((p) => p.children === list);
+			items.splice(parentIndex + 1, 0, it);
+		});
+		if (depth === 0) btn("+ เมนูย่อย", "เพิ่มเมนูย่อย", () => (item.children ??= []).push({ label: "เมนูย่อยใหม่", type: "custom", url: "" }));
+		btn("ลบ", "ลบรายการนี้", () => {
+			if (item.children?.length && !confirm("ลบเมนูนี้และเมนูย่อยทั้งหมด?")) return;
+			list.splice(i, 1);
+		}, false, "danger");
+		const type = box.querySelector<HTMLSelectElement>('[data-k="type"]')!;
+		type.value = item.type;
+		const page = box.querySelector<HTMLSelectElement>('[data-k="pageId"]')!;
+		if (item.pageId) page.value = item.pageId;
+		box.querySelector<HTMLInputElement>('[data-k="newTab"]')!.checked = !!item.newTab;
+		const show = () => {
+			box.querySelector<HTMLElement>("[data-url]")!.hidden = type.value !== "custom";
+			box.querySelector<HTMLElement>("[data-page]")!.hidden = type.value !== "page";
+		};
+		show();
+		box.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-k]").forEach((f) =>
+			f.addEventListener(f instanceof HTMLSelectElement || (f as HTMLInputElement).type === "checkbox" ? "change" : "input", () => {
+				const k = f.dataset.k as keyof Item;
+				(item as any)[k] = (f as HTMLInputElement).type === "checkbox" ? (f as HTMLInputElement).checked : f.value;
+				if (k === "type" && item.type === "page" && !item.pageId) item.pageId = page.value;
+				show();
+				save();
+			}),
+		);
+		return box;
+	}
+	function render() {
+		tree.innerHTML = "";
+		items.forEach((it, i) => {
+			tree.append(row(it, items, i, 0));
+			(it.children ?? []).forEach((c, j) => tree.append(row(c, it.children!, j, 1)));
+		});
+		if (!items.length) tree.append(el(`<p class="muted">ยังไม่มีรายการ</p>`));
+	}
+	document.querySelector("[data-add]")!.addEventListener("click", () => {
+		items.push({ label: "เมนูใหม่", type: "custom", url: "" });
+		save();
+		render();
+	});
+	render();
+</script>

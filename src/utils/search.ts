@@ -1,5 +1,5 @@
 import { postDate } from "./post-date";
-import { extractPlainText, getEmDashCollection, getTermsForEntries } from "emdash";
+import { extractPlainText, getEmDashCollection, getTermsForEntries } from "../lib/cms";
 import { formFileType, formHref } from "./forms";
 import { getRecruitData, recruitHref } from "./recruit";
 import { FILE_PAGE_TAXONOMY, findFilePageTerm } from "./page-files";
